@@ -7,6 +7,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using FileDownloader.Config;
+using WinSCP;
 
 namespace FileDownloader
 {
@@ -14,8 +15,6 @@ namespace FileDownloader
     {
         static void Main(string[] args)
         {
-            //ExecProgram("ftp://", "user1", "admin", "127.0.0.1", "dir", "D:/SDD/DOWNLOADED/");
-
             ExecProgram();
         }
 
@@ -30,7 +29,6 @@ namespace FileDownloader
             }
             else
             {
-                //Console.WriteLine("Error reading config file");
                 Helper.WriteLog("Error reading config file");
                 Thread.Sleep(5000);
             }
@@ -52,14 +50,34 @@ namespace FileDownloader
                 Helper.WriteLog($"Connecting to FTP server..");
                 do
                 {
-                    //step 1: clearing the last log
-                    //Helper.ClearLog(logDirectory);
 
-                    //step 2: getting the ftp files
+                    if(protocol == "sftp://")
+                    {
+                        // Set up session options
+                        SessionOptions sessionOptions = new SessionOptions
+                        {
+                            Protocol = Protocol.Sftp,
+                            HostName = "192.168.172.85",
+                            UserName = "root",
+                            Password = "bni1234/",
+                            SshHostKeyFingerprint = "ssh-ed25519 255 Qh+7f1+MdElZVp+owaWxKa8c2U9qhhxQpbj2rLxbgnc",
+                        };
+
+                        sessionOptions.AddRawSettings("FSProtocol", "2");
+
+                        using (Session session = new Session())
+                        {
+                            // Connect
+                            session.Open(sessionOptions);
+
+                            // Your code
+                        }
+                    }
+
+                    //step 1: getting the ftp files
                     var files = Helper.GetFTPFiles(protocol, username, password, host, remoteDirectory);
                     if (files != null)
                     {
-                        //bool FileProcessed;
                         int FileExtracted = 0;
                         int FileProcessed = 0;
 
@@ -77,9 +95,6 @@ namespace FileDownloader
                             $"                         DIGICSLITE UPDATER" +
                             $"\n#################################################################\n");
 
-                        //Console.WriteLine($"{filteredFiles.Count} files available in FTP\n" +
-                        //    $"\n");
-
                         Helper.WriteLog($"Program started, process will begin..");
 
                         Helper.ClearTempFolder(tempDirectory);
@@ -91,13 +106,10 @@ namespace FileDownloader
 
                         foreach (string file in filteredFiles)
                         {
-                            //Console.WriteLine(file);
                             Helper.WriteLog($"{file}");
                         }
 
                         Console.WriteLine("\n#################################################################\n");
-
-                        //string[] existingFiles = Directory.GetFiles(tempDirectory);
 
                         foreach (string file in filteredFiles)
                         {
@@ -116,57 +128,17 @@ namespace FileDownloader
 
                                     if (existingFilename == file)
                                     {
-                                        //step 3: checking the version package
+                                        //step 2: checking the version package
                                         DateTime lastModified = Process.GetFTPFilesVersion(url);
                                         DateTime existingLastModified = File.GetLastWriteTime(existingFile);
 
                                         if (lastModified > existingLastModified)
                                         {
-                                            //step 3.1: backing up the last version package
+                                            //step 2.1: backing up the last version package
                                             isBackupSuccess = Process.BackupFiles(existingFile, downloadDirectory);
 
                                             if (isBackupSuccess)
                                             {
-                                                //Console.WriteLine(file);
-
-                                                //step 3.1.1: downloading the package
-
-                                                //do
-                                                //{
-                                                //    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
-                                                //}
-                                                //while (isDownloadSuccess == false);
-
-                                                #region update 050423
-                                                //update 050423: download and update process need to be looped if the extracting process fail
-                                                //do
-                                                //{
-                                                //    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
-                                                //    if (isDownloadSuccess == true)
-                                                //    {
-
-                                                //        ++filesToBeDownloaded;
-                                                //        //FileProcessed = Process.ExtractCutFilesToTarget(downloadDirectory, tempDirectory, targetDirectory);
-                                                //        FileProcessed = Process.SuccessExtractCutFilesToTarget(downloadDirectory, tempDirectory, targetDirectory);
-                                                //        //if (FileProcessed == false)
-                                                //        if (FileProcessed == 0)
-                                                //        {
-                                                //            Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
-                                                //            isDownloadSuccess = false;
-                                                //        }
-                                                //        else
-                                                //        {
-                                                //            ++filesToBeUpdated;
-                                                //        }
-                                                //    }
-                                                //    else
-                                                //    {
-                                                //        Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
-                                                //        isDownloadSuccess = false;
-                                                //    }
-                                                //}
-                                                //while (isDownloadSuccess == false);
-                                                #endregion
 
                                                 #region update 270423
                                                 //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
@@ -207,7 +179,7 @@ namespace FileDownloader
                                         }
                                         else if (lastModified < existingLastModified)
                                         {
-                                            //step 3.2: checking if the existing file had different size due to interruption download process
+                                            //step 2.2: checking if the existing file had different size due to interruption download process
                                             FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
                                             request.Method = WebRequestMethods.Ftp.GetFileSize;
                                             request.Proxy = null;
@@ -215,7 +187,6 @@ namespace FileDownloader
                                             FtpWebResponse response = (FtpWebResponse)request.GetResponse();
 
                                             FileInfo fileInfo = new FileInfo(downloadFilePath);
-                                            //Console.WriteLine($"{fileInfo.Length} <> {response.ContentLength}");
 
                                             response.Close();
 
@@ -226,43 +197,6 @@ namespace FileDownloader
                                                 Helper.WriteLog($"Existing file: {fileInfo.Length} <> File at FTP Server: {response.ContentLength}");
 
                                                 Helper.WriteLog($"The existing {existingFilename} file size were different, retrying the download process..");
-
-                                                //do
-                                                //{
-                                                //    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
-                                                //}
-                                                //while (isDownloadSuccess == false);
-
-                                                #region update 050423
-                                                //update 050423: download and update process need to be looped if the extracting process fail
-                                                //do
-                                                //{
-                                                //    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
-                                                //    if (isDownloadSuccess == true)
-                                                //    {
-
-                                                //        ++filesToBeDownloaded;
-                                                //        //FileProcessed = Process.ExtractCutFilesToTarget(downloadDirectory, tempDirectory, targetDirectory);
-                                                //        FileProcessed = Process.SuccessExtractCutFilesToTarget(downloadDirectory, tempDirectory, targetDirectory);
-                                                //        //if (FileProcessed == false)
-                                                //        if (FileProcessed == 0)
-                                                //        {
-                                                //            Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
-                                                //            isDownloadSuccess = false;
-                                                //        }
-                                                //        else
-                                                //        {
-                                                //            ++filesToBeUpdated;
-                                                //        }
-                                                //    }
-                                                //    else
-                                                //    {
-                                                //        Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
-                                                //        isDownloadSuccess = false;
-                                                //    }
-                                                //}
-                                                //while (isDownloadSuccess == false);
-                                                #endregion
 
                                                 #region update 270423
                                                 //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
@@ -310,45 +244,6 @@ namespace FileDownloader
 
                                 if (!File.Exists(downloadFilePath))
                                 {
-                                    //Console.WriteLine(file);
-
-                                    //do
-                                    //{
-                                    //    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
-                                    //}
-                                    //while (isDownloadSuccess == false);
-
-                                    #region update 050423
-                                    //update 050423: download and update process need to be looped if the extracting process fail
-                                    //do
-                                    //{
-                                    //    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
-                                    //    if (isDownloadSuccess == true)
-                                    //    {
-                                    //        ++filesToBeDownloaded;
-
-                                    //        //FileProcessed = Process.ExtractCutFilesToTarget(downloadDirectory, tempDirectory, targetDirectory);
-                                    //        FileProcessed = Process.SuccessExtractCutFilesToTarget(downloadDirectory, tempDirectory, targetDirectory);
-                                    //        //if (FileProcessed == false)
-                                    //        if (FileProcessed == 0)
-                                    //        {
-                                    //            Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
-                                    //            isDownloadSuccess = false;
-                                    //        }
-                                    //        else
-                                    //        {
-                                    //            //++filesToBeUpdated;
-                                    //        }
-                                    //    }
-                                    //    else
-                                    //    {
-                                    //        Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
-                                    //        isDownloadSuccess = false;
-                                    //    }
-                                    //}
-                                    //while (isDownloadSuccess == false);
-                                    #endregion
-
                                     #region update 270423
                                     //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
                                     do
@@ -384,44 +279,6 @@ namespace FileDownloader
                             }
                             else
                             {
-                                //Console.WriteLine(file);
-
-                                //do
-                                //{
-                                //    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
-                                //}
-                                //while (isDownloadSuccess == false);
-
-                                #region update 050423
-                                //update 050423: download and update process need to be looped if the extracting process fail
-                                //do
-                                //{
-                                //    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
-                                //    if (isDownloadSuccess == true)
-                                //    {
-                                //        ++filesToBeDownloaded;
-                                //        //FileProcessed = Process.ExtractCutFilesToTarget(downloadDirectory, tempDirectory, targetDirectory);
-                                //        FileProcessed = Process.SuccessExtractCutFilesToTarget(downloadDirectory, tempDirectory, targetDirectory);
-                                //        //if (FileProcessed == false)
-                                //        if (FileProcessed == 0)
-                                //        {
-                                //            Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
-                                //            isDownloadSuccess = false;
-                                //        }
-                                //        else
-                                //        {
-                                //            //++filesToBeUpdated;
-                                //        }
-                                //    }
-                                //    else
-                                //    {
-                                //        Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
-                                //        isDownloadSuccess = false;
-                                //    }
-                                //}
-                                //while (isDownloadSuccess == false);
-                                #endregion
-
                                 #region update 270423
                                 //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
                                 do
@@ -476,13 +333,8 @@ namespace FileDownloader
                             }
                         }
 
-                        //Console.WriteLine(Directory.GetFiles(targetDirectory).Length + " files downloaded in {0} ", targetDirectory);
-
                         Helper.ClearTempFolder(tempDirectory);
 
-                        //Helper.WriteLog($"{filesToBeDownloaded} files downloaded at {downloadDirectory}");
-                        //Helper.WriteLog($"{filesToBeUpdated} files updated at {targetDirectory}");
-                        //Helper.WriteLog($"{FileProcessed} files updated at {targetDirectory}");
                         Helper.WriteLog($"Process has finished, program will shut down..\n");
                         Console.WriteLine($"\n#################################################################\n");
                         isFTPConnectSuccess = true;
