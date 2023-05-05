@@ -11,66 +11,250 @@ using SharpCompress.Archives.Zip;
 using System.Net.Mail;
 using System.Windows.Forms;
 using System.Threading;
+using WinSCP;
+using System.Security.Policy;
 
 namespace FileDownloader
 {
     internal class Process
     {
-        public static bool DownloadFile(string url, string file, string remoteServer, string downloadFilePath)
+        #region before
+        //public static bool DownloadFile(string url, string file, string remoteServer, string downloadFilePath)
+        //{
+        //    bool isOk = false;
+        //    do
+        //    {
+        //        try
+        //        {
+        //            Helper.WriteLog($"Downloading {file} from FTP Server {remoteServer} and updating {downloadFilePath}..");
+
+        //            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
+        //            request.Method = WebRequestMethods.Ftp.DownloadFile;
+        //            request.Proxy = null;
+
+        //            FtpWebResponse response = (FtpWebResponse)request.GetResponse();
+        //            //Console.WriteLine(lastModified.ToString() + " <> " + existingLastModified.ToString());
+
+        //            using (Stream stream = response.GetResponseStream())
+
+        //            using (Stream filestream = File.Create(downloadFilePath))
+        //            {
+        //                byte[] buffer = new byte[10240];
+        //                int read;
+        //                while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+        //                {
+        //                    filestream.Write(buffer, 0, read);
+        //                    Console.Write("\rDownloaded {0} bytes ", filestream.Position);
+        //                }
+        //            }
+
+        //            Helper.WriteLog($"Download file {file} done");
+
+        //            request = (FtpWebRequest)WebRequest.Create(url);
+        //            request.Method = WebRequestMethods.Ftp.GetFileSize;
+        //            request.Proxy = null;
+
+        //            response = (FtpWebResponse)request.GetResponse();
+
+        //            FileInfo fileInfo = new FileInfo(downloadFilePath);
+
+        //            response.Close();
+
+        //            Helper.WriteLog($"Checking the downloaded {file} file size and the {file} file at FTP Server..");
+
+        //            Helper.WriteLog($"Downloaded file: {fileInfo.Length} <> File at FTP Server: {response.ContentLength}");
+
+        //            if (fileInfo.Length != response.ContentLength)
+        //            {
+        //                Helper.WriteLog($"The downloaded {file} file size were different, retrying the download process..");
+        //                return isOk;
+        //            }
+        //            else
+        //            {
+        //                Helper.WriteLog($"The downloaded {file} file size are the same");
+        //                return !isOk;
+        //            }
+        //        }
+        //        catch (Exception e)
+        //        {
+        //            Helper.WriteLog("DownloadFile: Error => "+e.Message);
+        //            Helper.WriteLog("Retrying the download process.. ");
+        //            return isOk;
+        //        }
+        //    }
+        //    while (isOk);
+        //}
+        #endregion
+
+        #region update 040523
+        //update 040523: implement winscp
+        public static bool DownloadFile(string protocol, string username, string password, string host, 
+            string fingerprint, string remoteFilePath, string downloadFilePath, string remoteFilename)
         {
             bool isOk = false;
+            long remoteFileSize;
             do
             {
                 try
                 {
-                    Helper.WriteLog($"Downloading {file} from FTP Server {remoteServer} and updating {downloadFilePath}..");
-
-                    FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
-                    request.Method = WebRequestMethods.Ftp.DownloadFile;
-                    request.Proxy = null;
-
-                    FtpWebResponse response = (FtpWebResponse)request.GetResponse();
-                    //Console.WriteLine(lastModified.ToString() + " <> " + existingLastModified.ToString());
-
-                    using (Stream stream = response.GetResponseStream())
-
-                    using (Stream filestream = File.Create(downloadFilePath))
+                    if (protocol == "sftp://")
                     {
-                        byte[] buffer = new byte[10240];
-                        int read;
-                        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+                        if (fingerprint != string.Empty || fingerprint != null)
                         {
-                            filestream.Write(buffer, 0, read);
-                            Console.Write("\rDownloaded {0} bytes ", filestream.Position);
+                            SessionOptions sessionOptions = new SessionOptions
+                            {
+                                Protocol = Protocol.Sftp,
+                                HostName = host,
+                                UserName = username,
+                                Password = password,
+                                SshHostKeyFingerprint = fingerprint,
+                            };
+
+                            sessionOptions.AddRawSettings("FSProtocol", "2");
+
+                            using (Session session = new Session())
+                            {
+                                session.Open(sessionOptions);
+
+                                remoteFileSize = session.GetFileInfo(remoteFilePath).Length;
+
+                                TransferOptions transferOptions = new TransferOptions();
+                                transferOptions.TransferMode = TransferMode.Automatic;
+                                transferOptions.ResumeSupport.State = TransferResumeSupportState.On;
+                                transferOptions.FileMask = $"{remoteFilePath}";
+
+                                #region GetFiles method
+                                //TransferOperationResult method
+                                //TransferOperationResult operationResult;
+                                //operationResult = session.GetFiles($"{file}", $"{downloadDirectory}", false, transferOptions);
+                                //operationResult.Check();
+
+                                //foreach (TransferEventArgs transfer in operationResult.Transfers)
+                                //{
+                                //    Console.WriteLine("Download of {0} succeeded in {1}", transfer.FileName, transfer.Destination);
+                                //}
+                                #endregion
+
+                                #region SynchronizeDirectories method
+                                //SynchronizationResult method
+                                //SynchronizationResult synchronizationResult;
+                                //synchronizationResult = session.SynchronizeDirectories(SynchronizationMode.Local, 
+                                //    downloadDirectory, remoteDirectory, false, false, SynchronizationCriteria.Time, transferOptions);
+
+                                //synchronizationResult.Check();
+                                #endregion
+
+                                using (Stream stream = session.GetFile($"{remoteFilePath}", transferOptions))
+
+                                using (Stream filestream = File.Create(downloadFilePath))
+                                {
+                                    byte[] buffer = new byte[10240];
+                                    int read;
+                                    while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+                                    {
+                                        filestream.Write(buffer, 0, read);
+                                        Console.Write("\rDownloaded {0} bytes ", filestream.Position);
+                                    }
+                                }
+
+                                Helper.WriteLog($"Download file {remoteFilename} done");
+
+                                FileInfo fileInfo = new FileInfo(downloadFilePath);
+
+                                Helper.WriteLog($"Checking the downloaded {remoteFilename} file size and the {remoteFilename} file at FTP Server..");
+
+                                Helper.WriteLog($"Downloaded file: {fileInfo.Length} bytes <> File at FTP Server: {remoteFileSize} bytes");
+
+                                if (fileInfo.Length != remoteFileSize)
+                                {
+                                    Helper.WriteLog($"The downloaded {remoteFilename} file size were different, retrying the download process..");
+                                    session.Close();
+                                    return isOk;
+                                }
+                                else
+                                {
+                                    Helper.WriteLog($"The downloaded {remoteFilename} file size are the same");
+                                    session.Close();
+                                    return !isOk;
+                                }
+                            }
                         }
-                    }
-
-                    Helper.WriteLog($"Download file {file} done");
-
-                    request = (FtpWebRequest)WebRequest.Create(url);
-                    request.Method = WebRequestMethods.Ftp.GetFileSize;
-                    request.Proxy = null;
-
-                    response = (FtpWebResponse)request.GetResponse();
-
-                    FileInfo fileInfo = new FileInfo(downloadFilePath);
-
-                    response.Close();
-
-                    Helper.WriteLog($"Checking the downloaded {file} file size and the {file} file at FTP Server..");
-
-                    Helper.WriteLog($"Downloaded file: {fileInfo.Length} <> File at FTP Server: {response.ContentLength}");
-
-                    if (fileInfo.Length != response.ContentLength)
-                    {
-                        Helper.WriteLog($"The downloaded {file} file size were different, retrying the download process..");
-                        return isOk;
+                        else
+                        {
+                            Helper.WriteLog("Fingerprint in the Config.ini is empty..");
+                            DialogResult ans = MessageBox.Show("Fingerprint is empty! Please fill the Config.ini file correctly!",
+                                                "Warning", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            if (ans == DialogResult.OK)
+                            {
+                                Helper.WriteLog($"Process aborted, program will shut down..");
+                                Thread.Sleep(5000);
+                                Environment.Exit(0);
+                            }
+                            else
+                            {
+                                Helper.WriteLog($"Process aborted, program will shut down..");
+                                Thread.Sleep(5000);
+                                Environment.Exit(0);
+                            }
+                        }
                     }
                     else
                     {
-                        Helper.WriteLog($"The downloaded {file} file size are the same");
-                        return !isOk;
-                    }
+                        SessionOptions sessionOptions = new SessionOptions
+                        {
+                            Protocol = Protocol.Ftp,
+                            HostName = host,
+                            UserName = username,
+                            Password = password,
+                        };
+
+                        using (Session session = new Session())
+                        {
+                            session.Open(sessionOptions);
+
+                            remoteFileSize = session.GetFileInfo(remoteFilePath).Length;
+
+                            TransferOptions transferOptions = new TransferOptions();
+                            transferOptions.TransferMode = TransferMode.Automatic;
+                            transferOptions.ResumeSupport.State = TransferResumeSupportState.On;
+                            transferOptions.FileMask = $"{remoteFilePath}";
+
+                            using (Stream stream = session.GetFile($"{remoteFilePath}", transferOptions))
+
+                            using (Stream filestream = File.Create(downloadFilePath))
+                            {
+                                byte[] buffer = new byte[10240];
+                                int read;
+                                while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
+                                {
+                                    filestream.Write(buffer, 0, read);
+                                    Console.Write("\rDownloaded {0} bytes from {1} bytes", filestream.Position, remoteFileSize);
+                                }
+                            }
+
+                            Helper.WriteLog($"Download file {remoteFilename} done");
+
+                            FileInfo fileInfo = new FileInfo(downloadFilePath);
+
+                            Helper.WriteLog($"Checking the downloaded {remoteFilename} file size and the {remoteFilename} file at FTP Server..");
+
+                            Helper.WriteLog($"Downloaded file: {fileInfo.Length} bytes <> File at FTP Server: {remoteFileSize} bytes");
+
+                            if (fileInfo.Length != remoteFileSize)
+                            {
+                                Helper.WriteLog($"The downloaded {remoteFilename} file size were different, retrying the download process..");
+                                session.Close();
+                                return isOk;
+                            }
+                            else
+                            {
+                                Helper.WriteLog($"The downloaded {remoteFilename} file size are the same");
+                                session.Close();
+                            }
+                        }
+                    };
+                    isOk = true;
+                    return isOk;
                 }
                 catch (Exception e)
                 {
@@ -79,8 +263,10 @@ namespace FileDownloader
                     return isOk;
                 }
             }
-            while (isOk);
+            while (isOk == false);
         }
+
+        #endregion
 
         public static bool ExtractCopyFilesToTarget(string tempDirectory, string targetDirectory)
         {
@@ -792,28 +978,6 @@ namespace FileDownloader
                 //Console.WriteLine(e.Message);
                 Helper.WriteLog("BackupFiles: Error => "+e.Message);
                 return isOk;
-            }
-        }
-
-        public static DateTime GetFTPFilesVersion(string url)
-        {
-            DateTime lastModified = DateTime.MinValue;
-            try
-            {
-                FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
-                request.Method = WebRequestMethods.Ftp.GetDateTimestamp;
-                request.Proxy = null;
-
-                FtpWebResponse response = (FtpWebResponse)request.GetResponse();
-                response.Close();
-
-                lastModified = response.LastModified;
-                return lastModified;
-            }
-            catch(Exception e)
-            {
-                Helper.WriteLog("GetFTPFilesVersion: Error => "+e.Message);
-                return lastModified;
             }
         }
 

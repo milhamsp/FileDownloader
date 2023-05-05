@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Security.Policy;
 using System.Text;
@@ -8,6 +9,7 @@ using System.Threading;
 using System.Windows.Forms;
 using FileDownloader.Config;
 using WinSCP;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace FileDownloader
 {
@@ -24,7 +26,7 @@ namespace FileDownloader
             isOk = Helper.ReadConfig();
             if (isOk)
             {
-                StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, 
+                StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
                     FtpConfig.RemoteDirectory, FtpConfig.DownloadDirectory, FtpConfig.TempDirectory, FtpConfig.TargetDirectory, FtpConfig.LogDirectory);
             }
             else
@@ -34,7 +36,7 @@ namespace FileDownloader
             }
         }
 
-        private static void StartProcess(string protocol, string username, string password, string host, 
+        private static void StartProcess(string protocol, string username, string password, string host, string fingerprint,
             string remoteDirectory, string downloadDirectory, string tempDirectory, string targetDirectory, string logDirectory)
         {
             string remoteServer = host + remoteDirectory;
@@ -44,38 +46,17 @@ namespace FileDownloader
             bool logDirExist = Helper.CheckDirectory(logDirectory);
             bool isBackupSuccess = false, isDownloadSuccess = false, isFTPConnectSuccess = false;
 
-            if(tempDirExist && downloadDirExist && targetDirExist && logDirExist)
-            {
+            username = Helper.EncodeSpecialChar(username);
+            password = Helper.EncodeSpecialChar(password);
 
+            if (tempDirExist && downloadDirExist && targetDirExist && logDirExist)
+            {
                 Helper.WriteLog($"Connecting to FTP server..");
                 do
                 {
-
-                    if(protocol == "sftp://")
-                    {
-                        // Set up session options
-                        SessionOptions sessionOptions = new SessionOptions
-                        {
-                            Protocol = Protocol.Sftp,
-                            HostName = "192.168.172.85",
-                            UserName = "root",
-                            Password = "bni1234/",
-                            SshHostKeyFingerprint = "ssh-ed25519 255 Qh+7f1+MdElZVp+owaWxKa8c2U9qhhxQpbj2rLxbgnc",
-                        };
-
-                        sessionOptions.AddRawSettings("FSProtocol", "2");
-
-                        using (Session session = new Session())
-                        {
-                            // Connect
-                            session.Open(sessionOptions);
-
-                            // Your code
-                        }
-                    }
-
                     //step 1: getting the ftp files
-                    var files = Helper.GetFTPFiles(protocol, username, password, host, remoteDirectory);
+                    var files = Helper.GetRemoteFiles(protocol, username, password, host, fingerprint, remoteDirectory);
+
                     if (files != null)
                     {
                         int FileExtracted = 0;
@@ -92,7 +73,7 @@ namespace FileDownloader
                         }
 
                         Console.WriteLine($"\n#################################################################\n" +
-                            $"                         DIGICSLITE UPDATER" +
+                            $"                        DIGICSLITE UPDATER" +
                             $"\n#################################################################\n");
 
                         Helper.WriteLog($"Program started, process will begin..");
@@ -117,6 +98,7 @@ namespace FileDownloader
                             sb.Append(protocol + username + ":" + password + "@" + host + "/" + remoteDirectory + "/" + file);
                             string url = sb.ToString();
                             string downloadFilePath = downloadDirectory + file;
+                            string remoteFilePath = remoteDirectory + file;
 
                             string[] existingFiles = Directory.GetFiles(downloadDirectory);
 
@@ -129,7 +111,7 @@ namespace FileDownloader
                                     if (existingFilename == file)
                                     {
                                         //step 2: checking the version package
-                                        DateTime lastModified = Process.GetFTPFilesVersion(url);
+                                        DateTime lastModified = Helper.GetRemoteFileDate(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
                                         DateTime existingLastModified = File.GetLastWriteTime(existingFile);
 
                                         if (lastModified > existingLastModified)
@@ -144,7 +126,8 @@ namespace FileDownloader
                                                 //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
                                                 do
                                                 {
-                                                    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
+                                                    //update 050523: implement winscp
+                                                    isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
                                                     if (isDownloadSuccess == true)
                                                     {
 
@@ -180,21 +163,70 @@ namespace FileDownloader
                                         else if (lastModified < existingLastModified)
                                         {
                                             //step 2.2: checking if the existing file had different size due to interruption download process
-                                            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
-                                            request.Method = WebRequestMethods.Ftp.GetFileSize;
-                                            request.Proxy = null;
-
-                                            FtpWebResponse response = (FtpWebResponse)request.GetResponse();
-
                                             FileInfo fileInfo = new FileInfo(downloadFilePath);
 
-                                            response.Close();
+                                            #region before
+                                            //FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
+                                            //request.Method = WebRequestMethods.Ftp.GetFileSize;
+                                            //request.Proxy = null;
 
-                                            if (fileInfo.Length < response.ContentLength)
+                                            //FtpWebResponse response = (FtpWebResponse)request.GetResponse();
+
+                                            //response.Close();
+
+                                            //if (fileInfo.Length < response.ContentLength)
+                                            //{
+                                            //    Helper.WriteLog($"Checking the existing {file} file size and the {file} file at FTP Server..");
+
+                                            //    Helper.WriteLog($"Existing file: {fileInfo.Length} <> File at FTP Server: {response.ContentLength}");
+
+                                            //    Helper.WriteLog($"The existing {existingFilename} file size were different, retrying the download process..");
+
+                                            //    #region update 270423
+                                            //    //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
+                                            //    do
+                                            //    {
+                                            //        isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+                                            //        if (isDownloadSuccess == true)
+                                            //        {
+
+                                            //            ++filesToBeDownloaded;
+                                            //            FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
+                                            //            if (FileExtracted == 0)
+                                            //            {
+                                            //                Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
+                                            //                isDownloadSuccess = false;
+                                            //            }
+                                            //            else
+                                            //            {
+                                            //                FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
+                                            //                filesToBeUpdated = FileProcessed;
+                                            //            }
+                                            //        }
+                                            //        else
+                                            //        {
+                                            //            Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
+                                            //            isDownloadSuccess = false;
+                                            //        }
+                                            //    }
+                                            //    while (isDownloadSuccess == false);
+                                            //    #endregion
+
+                                            //    Console.WriteLine($"\n\n#################################################################\n");
+                                            //}
+                                            //else
+                                            //{
+                                            //    Helper.WriteLog($"{existingFilename} file version is the latest, update aborted..");
+                                            //}
+                                            #endregion
+
+                                            long remoteFileSize = Helper.GetRemoteFileSize(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+
+                                            if (fileInfo.Length < remoteFileSize)
                                             {
                                                 Helper.WriteLog($"Checking the existing {file} file size and the {file} file at FTP Server..");
 
-                                                Helper.WriteLog($"Existing file: {fileInfo.Length} <> File at FTP Server: {response.ContentLength}");
+                                                Helper.WriteLog($"Existing file: {fileInfo.Length} <> File at FTP Server: {remoteFileSize}");
 
                                                 Helper.WriteLog($"The existing {existingFilename} file size were different, retrying the download process..");
 
@@ -202,7 +234,7 @@ namespace FileDownloader
                                                 //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
                                                 do
                                                 {
-                                                    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
+                                                    isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
                                                     if (isDownloadSuccess == true)
                                                     {
 
@@ -248,7 +280,7 @@ namespace FileDownloader
                                     //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
                                     do
                                     {
-                                        isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
+                                        isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
                                         if (isDownloadSuccess == true)
                                         {
 
@@ -283,7 +315,7 @@ namespace FileDownloader
                                 //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
                                 do
                                 {
-                                    isDownloadSuccess = Process.DownloadFile(url, file, remoteServer, downloadFilePath);
+                                    isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
                                     if (isDownloadSuccess == true)
                                     {
 
@@ -336,8 +368,10 @@ namespace FileDownloader
                         Helper.ClearTempFolder(tempDirectory);
 
                         Helper.WriteLog($"Process has finished, program will shut down..\n");
-                        Console.WriteLine($"\n#################################################################\n");
+                        Console.WriteLine($"#################################################################\n");
+
                         isFTPConnectSuccess = true;
+
                         Thread.Sleep(5000);
                     }
                     else
@@ -367,5 +401,57 @@ namespace FileDownloader
 
             }
         }
+
+        #region winscp example
+        //private static void FileTransferred(object sender, TransferEventArgs e)
+        //{
+        //    if (e.Error == null)
+        //    {
+        //        Console.WriteLine("Download of {0} succeeded", e.FileName);
+        //    }
+        //    else
+        //    {
+        //        Console.WriteLine("Download of {0} failed: {1}", e.FileName, e.Error);
+        //    }
+
+        //    if (e.Chmod != null)
+        //    {
+        //        if (e.Chmod.Error == null)
+        //        {
+        //            Console.WriteLine(
+        //                "Permissions of {0} set to {1}", e.Chmod.FileName, e.Chmod.FilePermissions);
+        //        }
+        //        else
+        //        {
+        //            Console.WriteLine(
+        //                "Setting permissions of {0} failed: {1}", e.Chmod.FileName, e.Chmod.Error);
+        //        }
+        //    }
+        //    else
+        //    {
+        //        Console.WriteLine("Permissions of {0} kept with their defaults", e.Destination);
+        //    }
+
+        //    if (e.Touch != null)
+        //    {
+        //        if (e.Touch.Error == null)
+        //        {
+        //            Console.WriteLine(
+        //                "Timestamp of {0} set to {1}", e.Touch.FileName, e.Touch.LastWriteTime);
+        //        }
+        //        else
+        //        {
+        //            Console.WriteLine(
+        //                "Setting timestamp of {0} failed: {1}", e.Touch.FileName, e.Touch.Error);
+        //        }
+        //    }
+        //    else
+        //    {
+        //        // This should never happen during "local to remote" synchronization
+        //        Console.WriteLine(
+        //            "Timestamp of {0} kept with its default (current time)", e.Destination);
+        //    }
+        //}
+        #endregion
     }
 }
