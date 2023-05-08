@@ -970,6 +970,72 @@ namespace FileDownloader
             }
         }
 
+        public static bool BackupMultipartFiles(string filenameReference, string downloadDirectory)
+        {
+            bool isOk = false;
+            string[] existingFiles = Directory.GetFiles(downloadDirectory);
+            List<string> backupFiles = new List<string>();
+            
+            try
+            {
+                if (existingFiles != null)
+                {
+                    foreach (var file in existingFiles)
+                    {
+                        string existingFilename = file.Replace(downloadDirectory, "");
+                        if (existingFilename.Contains(filenameReference))
+                        {
+                            backupFiles.Add(file);
+                        }
+                    }
+
+                    Helper.WriteLog("Backing up the last version package process started..");
+
+                    string subDirectoryName;
+                    string currDate = DateTime.Now.ToString("ddMM");
+                    string[] otherDirectories = Directory.GetDirectories(downloadDirectory);
+                    if (otherDirectories.Length > 0)
+                    {
+                        foreach (var otherDirectory in otherDirectories)
+                        {
+                            subDirectoryName = otherDirectory.Replace(downloadDirectory, "");
+                            Helper.WriteLog($"Deleting directory and files in {otherDirectory}");
+                            //Console.WriteLine($"Deleting directory and files in {downloadDirectory+subDirectoryName}");
+                            //delete existing backup directory
+                            Directory.Delete(otherDirectory, true);
+                        }
+                    }
+
+                    if (!Directory.Exists(downloadDirectory+currDate))
+                    {
+                        //create backup directory
+                        Directory.CreateDirectory(downloadDirectory+currDate);
+                    }
+
+                    foreach (var file in backupFiles)
+                    {
+                        string existingFilename = file.Replace(downloadDirectory, "");
+                        Helper.WriteLog($"Backing up file to {downloadDirectory+currDate}\\{existingFilename}");
+                        //copy backup directory
+                        File.Copy(file, downloadDirectory+currDate+"\\"+existingFilename, true);
+                    }
+                    isOk = true;
+                    return isOk;
+                }
+                else
+                {
+                    Helper.WriteLog($"There are no files in {downloadDirectory}");
+                    return isOk;
+                }
+            }
+            catch (Exception e)
+            {
+                //Console.WriteLine(e.Message);
+                Helper.WriteLog("BackupFiles: Error => "+e.Message);
+                return isOk;
+            }
+        }
+
         #endregion
 
         public static bool BackupFiles(string existingFile, string downloadDirectory)
