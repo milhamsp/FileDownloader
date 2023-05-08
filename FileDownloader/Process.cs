@@ -13,6 +13,7 @@ using System.Windows.Forms;
 using System.Threading;
 using WinSCP;
 using System.Security.Policy;
+using System.Text.RegularExpressions;
 
 namespace FileDownloader
 {
@@ -933,6 +934,42 @@ namespace FileDownloader
             }
             return isUpdated;
         }
+
+        #endregion
+
+        #region update 080523
+        //update 080523: adding handler for multipart rar archive
+        public static int SuccessExtractMultipartFilesToTemp(List<string> files, string downloadDirectory, string tempDirectory)
+        {
+            int isExtracted = 0;
+            string filename;
+
+            try
+            {
+                filename = Regex.Replace(files.First(), @"\d", "*");
+                Helper.WriteLog($"Extracting {filename} and other parts to {tempDirectory}");
+                using (var archive = RarArchive.Open(files.ToArray().Select(s => Path.Combine(downloadDirectory, s)).Select(File.OpenRead)))
+                {
+                    foreach (var entry in archive.Entries.Where(entry => !entry.IsDirectory))
+                    {
+                        entry.WriteToDirectory(tempDirectory, new ExtractionOptions()
+                        {
+                            ExtractFullPath = true,
+                            Overwrite = true
+                        });
+                    }
+                }
+                ++isExtracted;
+                return isExtracted;
+            }
+            catch(Exception e)
+            {
+                Helper.WriteLog("ExtractFiles: Error => " + e.Message);
+                isExtracted = 0;
+                return isExtracted;
+            }
+        }
+
         #endregion
 
         public static bool BackupFiles(string existingFile, string downloadDirectory)

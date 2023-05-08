@@ -5,9 +5,13 @@ using System.Linq;
 using System.Net;
 using System.Security.Policy;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
 using FileDownloader.Config;
+using SharpCompress.Archives;
+using SharpCompress.Archives.Rar;
+using SharpCompress.Common;
 using WinSCP;
 using static System.Net.Mime.MediaTypeNames;
 
@@ -46,8 +50,9 @@ namespace FileDownloader
             bool logDirExist = Helper.CheckDirectory(logDirectory);
             bool isBackupSuccess = false, isDownloadSuccess = false, isFTPConnectSuccess = false;
 
-            username = Helper.EncodeSpecialChar(username);
-            password = Helper.EncodeSpecialChar(password);
+            //encode special char for username & pass
+            //username = Helper.EncodeSpecialChar(username);
+            //password = Helper.EncodeSpecialChar(password);
 
             if (tempDirExist && downloadDirExist && targetDirExist && logDirExist)
             {
@@ -72,9 +77,11 @@ namespace FileDownloader
                             }
                         }
 
+                        #region header
                         Console.WriteLine($"\n#################################################################\n" +
                             $"                        DIGICSLITE UPDATER" +
                             $"\n#################################################################\n");
+                        #endregion
 
                         Helper.WriteLog($"Program started, process will begin..");
 
@@ -82,8 +89,8 @@ namespace FileDownloader
 
                         Helper.WriteLog($"{filteredFiles.Count} files available in FTP Server {remoteServer}");
 
-                        int filesToBeUpdated = 0;
-                        int filesToBeDownloaded = 0;
+                        int filesUpdated = 0;
+                        int filesDownloaded = 0;
 
                         foreach (string file in filteredFiles)
                         {
@@ -94,9 +101,10 @@ namespace FileDownloader
 
                         foreach (string file in filteredFiles)
                         {
-                            StringBuilder sb = new StringBuilder();
-                            sb.Append(protocol + username + ":" + password + "@" + host + "/" + remoteDirectory + "/" + file);
-                            string url = sb.ToString();
+                            //StringBuilder sb = new StringBuilder();
+                            //sb.Append(protocol + username + ":" + password + "@" + host + "/" + remoteDirectory + "/" + file);
+                            //string url = sb.ToString();
+
                             string downloadFilePath = downloadDirectory + file;
                             string remoteFilePath = remoteDirectory + file;
 
@@ -131,7 +139,7 @@ namespace FileDownloader
                                                     if (isDownloadSuccess == true)
                                                     {
 
-                                                        ++filesToBeDownloaded;
+                                                        ++filesDownloaded;
                                                         FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
                                                         if (FileExtracted == 0)
                                                         {
@@ -141,7 +149,7 @@ namespace FileDownloader
                                                         else
                                                         {
                                                             FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
-                                                            filesToBeUpdated = FileProcessed;
+                                                            filesUpdated = FileProcessed;
                                                         }
                                                     }
                                                     else
@@ -165,61 +173,6 @@ namespace FileDownloader
                                             //step 2.2: checking if the existing file had different size due to interruption download process
                                             FileInfo fileInfo = new FileInfo(downloadFilePath);
 
-                                            #region before
-                                            //FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
-                                            //request.Method = WebRequestMethods.Ftp.GetFileSize;
-                                            //request.Proxy = null;
-
-                                            //FtpWebResponse response = (FtpWebResponse)request.GetResponse();
-
-                                            //response.Close();
-
-                                            //if (fileInfo.Length < response.ContentLength)
-                                            //{
-                                            //    Helper.WriteLog($"Checking the existing {file} file size and the {file} file at FTP Server..");
-
-                                            //    Helper.WriteLog($"Existing file: {fileInfo.Length} <> File at FTP Server: {response.ContentLength}");
-
-                                            //    Helper.WriteLog($"The existing {existingFilename} file size were different, retrying the download process..");
-
-                                            //    #region update 270423
-                                            //    //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
-                                            //    do
-                                            //    {
-                                            //        isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
-                                            //        if (isDownloadSuccess == true)
-                                            //        {
-
-                                            //            ++filesToBeDownloaded;
-                                            //            FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
-                                            //            if (FileExtracted == 0)
-                                            //            {
-                                            //                Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
-                                            //                isDownloadSuccess = false;
-                                            //            }
-                                            //            else
-                                            //            {
-                                            //                FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
-                                            //                filesToBeUpdated = FileProcessed;
-                                            //            }
-                                            //        }
-                                            //        else
-                                            //        {
-                                            //            Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
-                                            //            isDownloadSuccess = false;
-                                            //        }
-                                            //    }
-                                            //    while (isDownloadSuccess == false);
-                                            //    #endregion
-
-                                            //    Console.WriteLine($"\n\n#################################################################\n");
-                                            //}
-                                            //else
-                                            //{
-                                            //    Helper.WriteLog($"{existingFilename} file version is the latest, update aborted..");
-                                            //}
-                                            #endregion
-
                                             long remoteFileSize = Helper.GetRemoteFileSize(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
 
                                             if (fileInfo.Length < remoteFileSize)
@@ -238,7 +191,7 @@ namespace FileDownloader
                                                     if (isDownloadSuccess == true)
                                                     {
 
-                                                        ++filesToBeDownloaded;
+                                                        ++filesDownloaded;
                                                         FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
                                                         if (FileExtracted == 0)
                                                         {
@@ -248,7 +201,7 @@ namespace FileDownloader
                                                         else
                                                         {
                                                             FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
-                                                            filesToBeUpdated = FileProcessed;
+                                                            filesUpdated = FileProcessed;
                                                         }
                                                     }
                                                     else
@@ -284,7 +237,7 @@ namespace FileDownloader
                                         if (isDownloadSuccess == true)
                                         {
 
-                                            ++filesToBeDownloaded;
+                                            ++filesDownloaded;
                                             FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
                                             if (FileExtracted == 0)
                                             {
@@ -294,7 +247,7 @@ namespace FileDownloader
                                             else
                                             {
                                                 FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
-                                                filesToBeUpdated = FileProcessed;
+                                                filesUpdated = FileProcessed;
                                             }
                                         }
                                         else
@@ -319,7 +272,7 @@ namespace FileDownloader
                                     if (isDownloadSuccess == true)
                                     {
 
-                                        ++filesToBeDownloaded;
+                                        ++filesDownloaded;
                                         FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
                                         if (FileExtracted == 0)
                                         {
@@ -329,7 +282,7 @@ namespace FileDownloader
                                         else
                                         {
                                             FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
-                                            filesToBeUpdated = FileProcessed;
+                                            filesUpdated = FileProcessed;
                                         }
                                     }
                                     else
@@ -345,21 +298,21 @@ namespace FileDownloader
                             }
                         }
 
-                        if (filesToBeDownloaded == 0 && filesToBeUpdated == 0)
+                        if (filesDownloaded == 0 && filesUpdated == 0)
                         {
                             Helper.WriteLog("No files downloaded and updated");
                         }
                         else if (FileExtracted > 0 && FileProcessed > 0)
                         {
-                            if (filesToBeUpdated > 0)
+                            if (filesUpdated > 0)
                             {
-                                Helper.WriteLog($"{filesToBeDownloaded} files downloaded at {downloadDirectory}");
+                                Helper.WriteLog($"{filesDownloaded} files downloaded at {downloadDirectory}");
                                 Helper.WriteLog($"{FileProcessed} files updated at {targetDirectory}");
                                 Helper.WriteLog("Update process done");
                             }
                             else
                             {
-                                Helper.WriteLog($"{filesToBeDownloaded} files downloaded at {downloadDirectory}");
+                                Helper.WriteLog($"{filesDownloaded} files downloaded at {downloadDirectory}");
                                 Helper.WriteLog($"{FileProcessed} files extracted at {targetDirectory}");
                                 Helper.WriteLog("Download process done");
                             }
