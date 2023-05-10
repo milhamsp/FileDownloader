@@ -98,6 +98,7 @@ namespace FileDownloader
             {
                 try
                 {
+                    Helper.WriteLog($"Downloading {remoteFilename} from FTP Server {host} and updating {downloadFilePath}..");
                     if (protocol == "sftp://")
                     {
                         if (fingerprint != string.Empty || fingerprint != null)
@@ -157,7 +158,7 @@ namespace FileDownloader
                                         Console.Write("\rDownloaded {0} bytes ", filestream.Position);
                                     }
                                 }
-
+                                
                                 Helper.WriteLog($"Download file {remoteFilename} done");
 
                                 FileInfo fileInfo = new FileInfo(downloadFilePath);
@@ -1018,6 +1019,7 @@ namespace FileDownloader
                         Helper.WriteLog($"Backing up file to {downloadDirectory+currDate}\\{existingFilename}");
                         //copy backup directory
                         File.Copy(file, downloadDirectory+currDate+"\\"+existingFilename, true);
+                        File.Delete(downloadDirectory+existingFilename);
                     }
                     isOk = true;
                     return isOk;
