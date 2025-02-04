@@ -1,4 +1,5 @@
-﻿using FileDownloader.Config;
+﻿using DigiCSLiteUpdater.Config;
+using FileDownloader.Config;
 using SharpConfig;
 using System;
 using System.CodeDom;
@@ -6,10 +7,18 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http;
+using System.Reflection.Emit;
+using System.Security.Policy;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using WinSCP;
+using static System.Windows.Forms.VisualStyles.VisualStyleElement;
+using System.Web.Script.Serialization;
+using POSMainForm.models;
 
 namespace FileDownloader
 {
@@ -95,6 +104,11 @@ namespace FileDownloader
                 FtpConfig.TempDirectory = section["TempDirectory"].StringValue.Trim();
                 FtpConfig.TargetDirectory = section["TargetDirectory"].StringValue.Trim();
                 FtpConfig.LogDirectory = section["LogDirectory"].StringValue.Trim();
+
+                section = config["ConnectionConfig"];
+                ConnectionConfig.ConnectionUrl = section["ConnectionUrl"].StringValue.Trim();
+                ConnectionConfig.PathGetExecTime = section["PathGetExecTime"].StringValue.Trim();
+
                 isOk = true;
             }
             catch (Exception e)
@@ -145,10 +159,13 @@ namespace FileDownloader
                             // Your code
                             RemoteDirectoryInfo remoteDirectoryInfo = session.ListDirectory(remoteDirectory);
 
-                            foreach (RemoteFileInfo remoteFileInfo in remoteDirectoryInfo.Files)
-                            {
-                                listFiles.Add(remoteFileInfo.Name);
-                            }
+                            if (remoteDirectoryInfo != null) 
+                                foreach (RemoteFileInfo remoteFileInfo in remoteDirectoryInfo.Files)
+                                {
+                                    //update 311224 : filter file . and ..
+                                    if (remoteFileInfo.Name != "." && remoteFileInfo.Name != "..")
+                                        listFiles.Add(remoteFileInfo.Name);
+                                }
 
                             session.Close();
                         }
@@ -177,14 +194,15 @@ namespace FileDownloader
                         // Your code
                         RemoteDirectoryInfo remoteDirectoryInfo = session.ListDirectory(remoteDirectory);
 
-                        foreach (RemoteFileInfo remoteFileInfo in remoteDirectoryInfo.Files)
-                        {
-                            if (remoteFileInfo.Name.Contains(".") && remoteFileInfo.Name != "..")
+                        if (remoteDirectoryInfo != null)
+                            foreach (RemoteFileInfo remoteFileInfo in remoteDirectoryInfo.Files)
                             {
-                                //sb.Append(remoteFileInfo.Name+"\n");
-                                listFiles.Add(remoteFileInfo.Name);
+                                if (remoteFileInfo.Name.Contains(".") && remoteFileInfo.Name != "..")
+                                {
+                                    //sb.Append(remoteFileInfo.Name+"\n");
+                                    listFiles.Add(remoteFileInfo.Name);
+                                }
                             }
-                        }
 
                         session.Close();
                     }
@@ -526,5 +544,97 @@ namespace FileDownloader
                 dir.Delete(true);
             }
         }
+
+
+        #region DIGICSLITE
+        public static bool getExecDatetime()
+        {
+            try
+            {
+                WriteLog("Req Get Exec Datetime : " + MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathGetExecTime);
+                var _ = getToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathGetExecTime);
+
+                JavaScriptSerializer js = new JavaScriptSerializer();
+                js = new JavaScriptSerializer();
+                var _rspExecTime = js.Deserialize<RspAll<DropdownPropVM>>(_);
+
+                /* RESPONSE GET HUB PEMILIK DANA OK */
+                if (_rspExecTime != null && _rspExecTime.code != null && _rspExecTime.code.Equals("00"))
+                {
+                    for (int i = 0; i < _rspExecTime.data.Count; i++)
+                    {
+                        //listPendidikan.Add(_rspEncKey.data[i].code + "-" + _rspEncKey.data[i].name.Trim());
+                        string val = _rspExecTime.data[i].name.Trim();
+                        if (!string.IsNullOrWhiteSpace(val))
+                        {
+                            Data.ExecTime = val;
+                        }
+                    }
+                    
+                    WriteLog("Resp Get Exec Time : " + _);
+                    return true;
+
+                }
+                else
+                {
+                    WriteLog("Resp Get Exec Time : " + _); 
+                    return false;
+                }
+
+
+            }
+            catch (Exception ex)
+            {
+                WriteLog("Error :" + ex.Message);
+                return false;
+            }
+
+        }
+
+        public static string MaskedBaseUrl(string url)
+        {
+            string maskedUrl = url;
+
+            try
+            {
+                Uri uri = new Uri(url);
+                string host = uri.Host;
+                string[] ipParts = host.Split('.');
+
+                ipParts[0] = "***";
+                ipParts[1] = "***";
+
+                var maskedIp = string.Join(".", ipParts);
+                maskedUrl = url.Replace(host, maskedIp);
+
+                return maskedUrl;
+            }
+            catch (Exception ex)
+            {
+                return maskedUrl;
+            }
+        }
+
+        public static string getToMiddleWare(string url)
+        {
+            string contents = "";
+            try
+            {
+                HttpClient httpClient = new HttpClient();
+                // httpClient.Timeout = TimeSpan.FromSeconds(60);
+                Uri uri = new Uri(url);
+                httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+                var response = httpClient.GetAsync(uri).GetAwaiter().GetResult();
+                contents = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+
+            }
+            catch (Exception e)
+            {
+                //System.Windows.MessageBox.Show(e.Message, "Error", (MessageBoxButton)MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+            return contents;
+        }
+        #endregion
     }
 }

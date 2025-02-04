@@ -8,6 +8,8 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Windows.Forms;
+using DigiCSLiteUpdater;
+using DigiCSLiteUpdater.Config;
 using FileDownloader.Config;
 using SharpCompress.Archives;
 using SharpCompress.Archives.Rar;
@@ -28,15 +30,58 @@ namespace FileDownloader
         {
             bool isOk = false;
             isOk = Helper.ReadConfig();
-            if (isOk)
+            bool isExecDateTimeExist = false;
+            isExecDateTimeExist = Helper.getExecDatetime();
+            if (isOk && isExecDateTimeExist)
             {
-                StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
-                    FtpConfig.RemoteDirectory, FtpConfig.DownloadDirectory, FtpConfig.TempDirectory, FtpConfig.TargetDirectory, FtpConfig.LogDirectory);
+                //StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
+                //    FtpConfig.RemoteDirectory, FtpConfig.DownloadDirectory, FtpConfig.TempDirectory, FtpConfig.TargetDirectory, FtpConfig.LogDirectory);
+                RunScheduler();
+            }
+            else if (isOk && !isExecDateTimeExist)
+            {
+                Data.ExecTime = "16.00";
+                RunScheduler();
             }
             else
             {
                 Helper.WriteLog("Error reading config file");
                 Thread.Sleep(5000);
+            }
+        }
+
+        private static void RunScheduler()
+        {
+            bool onLoop = true;
+            while (onLoop)
+            {
+                DateTime currentTime = DateTime.Now;
+                string execTime = Data.ExecTime;
+                string[] splitExecTime = execTime.Split('.');
+
+                if (!AppData.SuccessProcess)
+                {
+                    //StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
+                    //        FtpConfig.RemoteDirectory, FtpConfig.DownloadDirectory, FtpConfig.TempDirectory, FtpConfig.TargetDirectory, FtpConfig.LogDirectory);
+
+                    if (splitExecTime.Length > 1)
+                    {
+                        DateTime scheduledTime = new DateTime(currentTime.Year, currentTime.Month, currentTime.Day, int.Parse(splitExecTime[0]), int.Parse(splitExecTime[1]), 0);
+
+                        if (currentTime >= scheduledTime && currentTime < scheduledTime.AddMinutes(1))
+                        {
+                            Helper.WriteLog("StartProcess executed at: " + currentTime);
+                            StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
+                                FtpConfig.RemoteDirectory, FtpConfig.DownloadDirectory, FtpConfig.TempDirectory, FtpConfig.TargetDirectory, FtpConfig.LogDirectory);
+                        }
+                    }
+
+                    Thread.Sleep(10000);
+                }
+                else
+                {
+                    onLoop = false;
+                }
             }
         }
 
@@ -130,6 +175,7 @@ namespace FileDownloader
 
                                     DateTime lastModified = Helper.GetRemoteFileDate(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, firstRemoteFile);
                                     DateTime existingLastModified = File.GetLastWriteTime(firstExistingFile);
+                                    Helper.WriteLog($"Remote File : {lastModified} <> Local File : {existingLastModified}");
 
                                     if (lastModified > existingLastModified)
                                     {
@@ -373,6 +419,7 @@ namespace FileDownloader
                                                 //step 2: checking the version package
                                                 DateTime lastModified = Helper.GetRemoteFileDate(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
                                                 DateTime existingLastModified = File.GetLastWriteTime(existingFile);
+                                                Helper.WriteLog($"Remote File : {lastModified} <> Local File : {existingLastModified}");
 
                                                 if (lastModified > existingLastModified)
                                                 {
@@ -589,6 +636,7 @@ namespace FileDownloader
                         if (filesDownloaded == 0 && filesUpdated == 0)
                         {
                             Helper.WriteLog("No files downloaded and updated");
+                            AppData.SuccessProcess = true;
                         }
                         else if (FileExtracted > 0 && FileProcessed > 0)
                         {
@@ -597,17 +645,20 @@ namespace FileDownloader
                                 Helper.WriteLog($"{filesDownloaded} files downloaded at {downloadDirectory}");
                                 Helper.WriteLog($"{FileProcessed} files updated at {targetDirectory}");
                                 Helper.WriteLog("Update process done");
+                                AppData.SuccessProcess = true;
                             }
                             else
                             {
                                 Helper.WriteLog($"{filesDownloaded} files downloaded at {downloadDirectory}");
                                 Helper.WriteLog($"{FileProcessed} files extracted at {targetDirectory}");
                                 Helper.WriteLog("Download process done");
+                                AppData.SuccessProcess = true;
                             }
                         }
 
                         Helper.ClearTempFolder(tempDirectory);
 
+                        AppData.SuccessProcess = true;
                         Helper.WriteLog($"Process has finished, program will shut down..\n");
                         Console.WriteLine($"#################################################################\n");
 
