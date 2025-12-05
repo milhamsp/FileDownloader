@@ -128,7 +128,7 @@ namespace FileDownloader
                                 }
                             }
                         }
-                        else
+                        else if (files.Count > 0)
                         {
                             foreach (var file in files)
                             {
@@ -339,7 +339,7 @@ namespace FileDownloader
                         #endregion
 
                         #region single file handler
-                        else
+                        else if (filteredFiles.Count > 0)
                         {
                             string firstRemoteFile = filteredFiles.First();
                             string filenameReference = Regex.Replace(firstRemoteFile, @"\d", "");
