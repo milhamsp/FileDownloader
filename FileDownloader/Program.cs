@@ -10,6 +10,7 @@ using System.Threading;
 using System.Windows.Forms;
 using DigiCSLiteUpdater;
 using DigiCSLiteUpdater.Config;
+using DigiCSLiteUpdater.Model;
 using FileDownloader.Config;
 using SharpCompress.Archives;
 using SharpCompress.Archives.Rar;
@@ -31,7 +32,7 @@ namespace FileDownloader
             bool isOk = false;
             isOk = Helper.ReadConfig();
             bool isExecDateTimeExist = false;
-            isExecDateTimeExist = Helper.getExecDatetime();
+            isExecDateTimeExist = Helper.PostGetExecDatetime();
             if (isOk && isExecDateTimeExist)
             {
                 //StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
@@ -40,12 +41,12 @@ namespace FileDownloader
             }
             else if (isOk && !isExecDateTimeExist)
             {
-                Data.ExecTime = "16.00";
+                AppData.ExecTime = "16.00";
                 RunScheduler();
             }
             else
             {
-                Helper.WriteLog("Error reading config file");
+                Util.WriteLog("Error reading config file");
                 Thread.Sleep(5000);
             }
         }
@@ -56,7 +57,7 @@ namespace FileDownloader
             while (onLoop)
             {
                 DateTime currentTime = DateTime.Now;
-                string execTime = Data.ExecTime;
+                string execTime = AppData.ExecTime;
                 string[] splitExecTime = execTime.Split('.');
 
                 if (!AppData.SuccessProcess)
@@ -70,9 +71,10 @@ namespace FileDownloader
 
                         if (currentTime >= scheduledTime && currentTime < scheduledTime.AddMinutes(1))
                         {
-                            Helper.WriteLog("StartProcess executed at: " + currentTime);
+                            Util.WriteLog("StartProcess executed at: " + currentTime);
                             StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
-                                FtpConfig.RemoteDirectory, FtpConfig.DownloadDirectory, FtpConfig.TempDirectory, FtpConfig.TargetDirectory, FtpConfig.LogDirectory);
+                                DirectoryConfig.RemoteDirectory, DirectoryConfig.DownloadDirectory, DirectoryConfig.TempDirectory, DirectoryConfig.TargetDirectory, DirectoryConfig.LogDirectory,
+                                ConnectionConfig.ConnectionUrl);
                         }
                     }
 
@@ -86,14 +88,15 @@ namespace FileDownloader
         }
 
         private static void StartProcess(string protocol, string username, string password, string host, string fingerprint,
-            string remoteDirectory, string downloadDirectory, string tempDirectory, string targetDirectory, string logDirectory)
+            string remoteDirectory, string downloadDirectory, string tempDirectory, string targetDirectory, string logDirectory,
+            string remoteAddress)
         {
             string remoteServer = host + remoteDirectory;
-            bool tempDirExist = Helper.CheckDirectory(tempDirectory);
-            bool downloadDirExist = Helper.CheckDirectory(downloadDirectory);
-            bool targetDirExist = Helper.CheckDirectory(targetDirectory);
-            bool logDirExist = Helper.CheckDirectory(logDirectory);
-            bool isBackupSuccess = false, isDownloadSuccess = false, isFTPConnectSuccess = false, isExtractSuccess = false;
+            bool tempDirExist = Util.CheckDirectory(tempDirectory);
+            bool downloadDirExist = Util.CheckDirectory(downloadDirectory);
+            bool targetDirExist = Util.CheckDirectory(targetDirectory);
+            bool logDirExist = Util.CheckDirectory(logDirectory);
+            bool isBackupSuccess = false, isDownloadSuccess = false, isFTPCycleOk = false, isRemoteCycleOk = false;
 
             int filesUpdated = 0;
             int filesDownloaded = 0;
@@ -104,164 +107,344 @@ namespace FileDownloader
 
             if (tempDirExist && downloadDirExist && targetDirExist && logDirExist)
             {
-                Helper.WriteLog($"Connecting to FTP server..");
-                do
+                if (ClientConfig.Mode.Equals("1"))
                 {
-                    //step 1: getting the ftp files
-                    var files = Helper.GetRemoteFiles(protocol, username, password, host, fingerprint, remoteDirectory);
+                    bool isConnect = Helper.IsAddressAvailable(remoteAddress);
+                    //step 1: checking connection to remote
+                    Util.WriteLog($"Checking connection to remote : {Helper.MaskedBaseUrl(remoteAddress)}");
 
-                    if (files != null)
+                    do
                     {
-                        int FileExtracted = 0;
-                        int FileProcessed = 0;
-
-                        List<string> filteredFiles = new List<string>();
-                        List<string> existingFiles = Directory.GetFiles(downloadDirectory).ToList();
-
-                        if (files.Count > 1)
-                        {
-                            foreach (var file in files)
-                            {
-                                if (file.Contains(".part"))
-                                {
-                                    filteredFiles.Add(file);
-                                }
-                            }
-                        }
-                        else if (files.Count > 0)
-                        {
-                            foreach (var file in files)
-                            {
-                                if (file.Contains("."))
-                                {
-                                    filteredFiles.Add(file);
-                                }
-                            }
-                        }
+                        //step 2: checking version
+                        Util.WriteLog($"Checking version..");
 
                         #region header
                         Console.WriteLine($"\n#################################################################\n" +
                             $"                        DIGICSLITE UPDATER" +
-                            $"\n#################################################################\n");
+                            $"\n#################################################################\n" +
+                            $"" +
+                            $"");
                         #endregion
 
-                        Helper.WriteLog($"Program started, process will begin..");
+                        bool checkUpdate = false, isUpdateExist = false;
+                        RspCheckUpdate rspCheckUpdate;
 
-                        Helper.ClearTempFolder(tempDirectory);
+                        (checkUpdate, rspCheckUpdate) = Helper.PostCheckUpdate();
+                        if (rspCheckUpdate != null)
+                            isUpdateExist = rspCheckUpdate.HasUpdate;
 
-                        Helper.WriteLog($"{filteredFiles.Count} files available in FTP Server {remoteServer}");
-
-                        foreach (string file in filteredFiles)
+                        //step 3: check for update success
+                        if (checkUpdate)
                         {
-                            Helper.WriteLog($"{file}");
-                        }
-
-                        Console.WriteLine("\n#################################################################\n");
-
-                        #region multipart file handler
-                        if (filteredFiles.Count > 1)
-                        {
-                            if (existingFiles != null)
+                            int FileExtracted = 0;
+                            int FileProcessed = 0;
+                            if (isUpdateExist)
                             {
-                                if (existingFiles.Count > 0)
-                                {
-                                    string firstRemoteFile = filteredFiles.First();
-                                    string filenameReference = Regex.Replace(firstRemoteFile, @"\d", "");
-                                    filenameReference = filenameReference.Replace(".part", "").Replace(".rar", "");
-                                    string downloadFilePath = downloadDirectory + firstRemoteFile;
-                                    string remoteFilePath = remoteDirectory + firstRemoteFile;
+                                ++filesDownloaded; //assume file is already downloaded
 
-                                    string firstExistingFile = existingFiles.First();
+                                Util.WriteLog($"Program started, process will begin..");
 
-                                    DateTime lastModified = Helper.GetRemoteFileDate(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, firstRemoteFile);
-                                    DateTime existingLastModified = File.GetLastWriteTime(firstExistingFile);
-                                    Helper.WriteLog($"Remote File : {lastModified} <> Local File : {existingLastModified}");
+                                Util.ClearTempFolder(tempDirectory);
 
-                                    if (lastModified > existingLastModified)
+                                List<string> existingFiles = Directory.GetFiles(downloadDirectory)
+                                    .Where(file =>
                                     {
+                                        string ext = Path.GetExtension(file);
+                                        return !ext.Equals(".tmp", StringComparison.OrdinalIgnoreCase)
+                                        && !ext.Equals(".downloaded", StringComparison.OrdinalIgnoreCase);
+                                    })
+                                    .ToList();
 
-                                        isBackupSuccess = Process.BackupMultipartFiles(filenameReference, downloadDirectory);
+                                //check for existing update
+                                if (existingFiles.Any())
+                                {
+                                    foreach (string file in existingFiles)
+                                    {
+                                        string filename = Path.GetFileName(file);
 
-                                        if (isBackupSuccess == true)
+                                        //backup old update
+                                        isBackupSuccess = Process.BackupMultipartFiles(filename, downloadDirectory);
+                                        if (isBackupSuccess)
                                         {
-                                            do
+                                            //update status in db
+                                            bool updateStatus = Helper.PostUpdateStatus(2); //start updating
+
+                                            //extract files
+                                            if (updateStatus)
                                             {
-                                                foreach (var file in filteredFiles)
+                                                FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
+                                                if (FileExtracted > 0)
                                                 {
-                                                    downloadFilePath = downloadDirectory + file;
-                                                    remoteFilePath = remoteDirectory + file;
-
-                                                    do
-                                                    {
-                                                        isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
-                                                    }
-                                                    while (isDownloadSuccess == false);
-
-                                                    ++filesDownloaded;
-                                                }
-
-                                                FileExtracted = Process.SuccessExtractMultipartFilesToTemp(filteredFiles, downloadDirectory, tempDirectory);
-
-                                                if (FileExtracted == 0)
-                                                {
-                                                    Helper.WriteLog($"Extracting file failure, retrying to redownload the files..");
-                                                    filesDownloaded = 0;
-                                                    isDownloadSuccess = false;
-                                                }
-                                                else
-                                                {
+                                                    //update files
                                                     FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
                                                     filesUpdated = FileProcessed;
-                                                    isDownloadSuccess = true;
+
+                                                    //update status in db
+                                                    updateStatus = Helper.PostUpdateStatus(3); //update done
                                                 }
                                             }
-                                            while (isDownloadSuccess == false);
+                                        }
+                                        else
+                                        {
+                                            Util.WriteLog("Backuping the last version package failed, process aborted..");
                                         }
                                     }
-                                    else if (lastModified < existingLastModified)
+                                }
+                                else
+                                {
+                                    //update status in db
+                                    bool updateStatus = Helper.PostUpdateStatus(2); //start updating
+
+                                    //extract files
+                                    if (updateStatus)
                                     {
-
-                                        if (filteredFiles.Count != existingFiles.Count)
+                                        FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
+                                        if (FileExtracted > 0)
                                         {
-                                            Helper.WriteLog($"Checking the existing total files and the total files at Remote Server..");
+                                            //update files
+                                            FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
+                                            filesUpdated = FileProcessed;
 
-                                            Helper.WriteLog($"Existing file: {existingFiles.Count} <> File at FTP Server: {filteredFiles.Count}");
-
-                                            Helper.WriteLog($"The existing total files were different, retrying the download process..");
-
-                                            do
-                                            {
-                                                foreach (var file in filteredFiles)
-                                                {
-                                                    downloadFilePath = downloadDirectory + file;
-                                                    remoteFilePath = remoteDirectory + file;
-
-                                                    do
-                                                    {
-                                                        isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
-                                                    }
-                                                    while (isDownloadSuccess == false);
-
-                                                    ++filesDownloaded;
-                                                }
-
-                                                FileExtracted = Process.SuccessExtractMultipartFilesToTemp(filteredFiles, downloadDirectory, tempDirectory);
-
-                                                if (FileExtracted == 0)
-                                                {
-                                                    Helper.WriteLog($"Extracting file failure, retrying to redownload the files..");
-                                                    filesDownloaded = 0;
-                                                    isDownloadSuccess = false;
-                                                }
-                                                else
-                                                {
-                                                    FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
-                                                    filesUpdated = FileProcessed;
-                                                    isDownloadSuccess = true;
-                                                }
-                                            }
-                                            while (isDownloadSuccess == false);
+                                            //update status in db
+                                            updateStatus = Helper.PostUpdateStatus(3); //update done
                                         }
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                Util.WriteLog($"{rspCheckUpdate.Message}");
+                            }
+
+                            if (filesDownloaded == 0 && filesUpdated == 0)
+                            {
+                                Util.WriteLog("No files downloaded and updated");
+                                AppData.SuccessProcess = true;
+                            }
+                            else if (FileExtracted > 0 && FileProcessed > 0)
+                            {
+                                if (filesUpdated > 0)
+                                {
+                                    Util.WriteLog($"{filesDownloaded} files downloaded at {downloadDirectory}");
+                                    Util.WriteLog($"{FileProcessed} files updated at {targetDirectory}");
+                                    Util.WriteLog("Update process done");
+                                    AppData.SuccessProcess = true;
+                                }
+                                else
+                                {
+                                    Util.WriteLog($"{filesDownloaded} files downloaded at {downloadDirectory}");
+                                    Util.WriteLog($"{FileProcessed} files extracted at {targetDirectory}");
+                                    Util.WriteLog("Download process done");
+                                    AppData.SuccessProcess = true;
+                                }
+                            }
+                        }
+
+                        Util.ClearTempFolder(tempDirectory);
+
+                        AppData.SuccessProcess = true;
+                        Util.WriteLog($"Process has finished, program will shut down..\n");
+                        Console.WriteLine($"#################################################################\n");
+
+                        Thread.Sleep(5000);
+                    } while (!isRemoteCycleOk);
+                }
+                else
+                {
+                    Util.WriteLog($"Connecting to FTP server..");
+                    do
+                    {
+                        //step 1: getting the ftp files
+                        var files = Helper.GetRemoteFiles(protocol, username, password, host, fingerprint, remoteDirectory);
+
+                        if (files != null)
+                        {
+                            int FileExtracted = 0;
+                            int FileProcessed = 0;
+
+                            List<string> filteredFiles = new List<string>();
+                            List<string> existingFiles = Directory.GetFiles(downloadDirectory).ToList();
+
+                            if (files.Count > 1)
+                            {
+                                foreach (var file in files)
+                                {
+                                    if (file.Contains(".part"))
+                                    {
+                                        filteredFiles.Add(file);
+                                    }
+                                }
+                            }
+                            else if (files.Count > 0)
+                            {
+                                foreach (var file in files)
+                                {
+                                    if (file.Contains("."))
+                                    {
+                                        filteredFiles.Add(file);
+                                    }
+                                }
+                            }
+
+                            #region header
+                            Console.WriteLine($"\n#################################################################\n" +
+                                $"                        DIGICSLITE UPDATER" +
+                                $"\n#################################################################\n");
+                            #endregion
+
+                            Util.WriteLog($"Program started, process will begin..");
+
+                            Util.ClearTempFolder(tempDirectory);
+
+                            Util.WriteLog($"{filteredFiles.Count} files available in FTP Server {remoteServer}");
+
+                            foreach (string file in filteredFiles)
+                            {
+                                Util.WriteLog($"{file}");
+                            }
+
+                            Console.WriteLine("\n#################################################################\n");
+
+                            #region multipart file handler
+                            if (filteredFiles.Count > 1)
+                            {
+                                if (existingFiles != null)
+                                {
+                                    if (existingFiles.Count > 0)
+                                    {
+                                        string firstRemoteFile = filteredFiles.First();
+                                        string filenameReference = Regex.Replace(firstRemoteFile, @"\d", "");
+                                        filenameReference = filenameReference.Replace(".part", "").Replace(".rar", "");
+                                        string downloadFilePath = downloadDirectory + firstRemoteFile;
+                                        string remoteFilePath = remoteDirectory + firstRemoteFile;
+
+                                        string firstExistingFile = existingFiles.First();
+
+                                        DateTime lastModified = Helper.GetRemoteFileDate(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, firstRemoteFile);
+                                        DateTime existingLastModified = File.GetLastWriteTime(firstExistingFile);
+                                        Util.WriteLog($"Remote File : {lastModified} <> Local File : {existingLastModified}");
+
+                                        if (lastModified > existingLastModified)
+                                        {
+
+                                            isBackupSuccess = Process.BackupMultipartFiles(filenameReference, downloadDirectory);
+
+                                            if (isBackupSuccess == true)
+                                            {
+                                                do
+                                                {
+                                                    foreach (var file in filteredFiles)
+                                                    {
+                                                        downloadFilePath = downloadDirectory + file;
+                                                        remoteFilePath = remoteDirectory + file;
+
+                                                        do
+                                                        {
+                                                            isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+                                                        }
+                                                        while (isDownloadSuccess == false);
+
+                                                        ++filesDownloaded;
+                                                    }
+
+                                                    FileExtracted = Process.SuccessExtractMultipartFilesToTemp(filteredFiles, downloadDirectory, tempDirectory);
+
+                                                    if (FileExtracted == 0)
+                                                    {
+                                                        Util.WriteLog($"Extracting file failure, retrying to redownload the files..");
+                                                        filesDownloaded = 0;
+                                                        isDownloadSuccess = false;
+                                                    }
+                                                    else
+                                                    {
+                                                        FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
+                                                        filesUpdated = FileProcessed;
+                                                        isDownloadSuccess = true;
+                                                    }
+                                                }
+                                                while (isDownloadSuccess == false);
+                                            }
+                                        }
+                                        else if (lastModified < existingLastModified)
+                                        {
+
+                                            if (filteredFiles.Count != existingFiles.Count)
+                                            {
+                                                Util.WriteLog($"Checking the existing total files and the total files at Remote Server..");
+
+                                                Util.WriteLog($"Existing file: {existingFiles.Count} <> File at FTP Server: {filteredFiles.Count}");
+
+                                                Util.WriteLog($"The existing total files were different, retrying the download process..");
+
+                                                do
+                                                {
+                                                    foreach (var file in filteredFiles)
+                                                    {
+                                                        downloadFilePath = downloadDirectory + file;
+                                                        remoteFilePath = remoteDirectory + file;
+
+                                                        do
+                                                        {
+                                                            isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+                                                        }
+                                                        while (isDownloadSuccess == false);
+
+                                                        ++filesDownloaded;
+                                                    }
+
+                                                    FileExtracted = Process.SuccessExtractMultipartFilesToTemp(filteredFiles, downloadDirectory, tempDirectory);
+
+                                                    if (FileExtracted == 0)
+                                                    {
+                                                        Util.WriteLog($"Extracting file failure, retrying to redownload the files..");
+                                                        filesDownloaded = 0;
+                                                        isDownloadSuccess = false;
+                                                    }
+                                                    else
+                                                    {
+                                                        FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
+                                                        filesUpdated = FileProcessed;
+                                                        isDownloadSuccess = true;
+                                                    }
+                                                }
+                                                while (isDownloadSuccess == false);
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        do
+                                        {
+                                            foreach (var file in filteredFiles)
+                                            {
+                                                string downloadFilePath = downloadDirectory + file;
+                                                string remoteFilePath = remoteDirectory + file;
+
+                                                do
+                                                {
+                                                    isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+                                                }
+                                                while (isDownloadSuccess == false);
+
+                                                ++filesDownloaded;
+                                            }
+
+                                            FileExtracted = Process.SuccessExtractMultipartFilesToTemp(filteredFiles, downloadDirectory, tempDirectory);
+
+                                            if (FileExtracted == 0)
+                                            {
+                                                Util.WriteLog($"Extracting file failure, retrying to redownload the files..");
+                                                filesDownloaded = 0;
+                                                isDownloadSuccess = false;
+                                            }
+                                            else
+                                            {
+                                                FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
+                                                filesUpdated = FileProcessed;
+                                                isDownloadSuccess = true;
+                                            }
+                                        }
+                                        while (isDownloadSuccess == false);
                                     }
                                 }
                                 else
@@ -286,7 +469,7 @@ namespace FileDownloader
 
                                         if (FileExtracted == 0)
                                         {
-                                            Helper.WriteLog($"Extracting file failure, retrying to redownload the files..");
+                                            Util.WriteLog($"Extracting file failure, retrying to redownload the files..");
                                             filesDownloaded = 0;
                                             isDownloadSuccess = false;
                                         }
@@ -300,88 +483,209 @@ namespace FileDownloader
                                     while (isDownloadSuccess == false);
                                 }
                             }
-                            else
-                            {
-                                do
-                                {
-                                    foreach (var file in filteredFiles)
-                                    {
-                                        string downloadFilePath = downloadDirectory + file;
-                                        string remoteFilePath = remoteDirectory + file;
+                            #endregion
 
-                                        do
+                            #region single file handler
+                            else if (filteredFiles.Count > 0)
+                            {
+                                string firstRemoteFile = filteredFiles.First();
+                                string filenameReference = Regex.Replace(firstRemoteFile, @"\d", "");
+                                filenameReference = filenameReference.Replace(".part", "").Replace(".rar", "");
+
+                                foreach (string file in filteredFiles)
+                                {
+                                    //StringBuilder sb = new StringBuilder();
+                                    //sb.Append(protocol + username + ":" + password + "@" + host + "/" + remoteDirectory + "/" + file);
+                                    //string url = sb.ToString();
+
+                                    string downloadFilePath = downloadDirectory + file;
+                                    string remoteFilePath = remoteDirectory + file;
+
+                                    if (existingFiles != null)
+                                    {
+                                        if (existingFiles.Count > 1)
                                         {
-                                            isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+                                            string firstExistingFile = existingFiles.First();
+
+                                            DateTime lastModified = Helper.GetRemoteFileDate(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+                                            DateTime existingLastModified = File.GetLastWriteTime(firstExistingFile);
+
+                                            if (lastModified > existingLastModified)
+                                            {
+                                                isBackupSuccess = Process.BackupMultipartFiles(filenameReference, downloadDirectory);
+
+                                                if (isBackupSuccess)
+                                                {
+                                                    #region update 270423
+                                                    //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
+                                                    do
+                                                    {
+                                                        //update 050523: implement winscp
+                                                        isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+                                                        if (isDownloadSuccess == true)
+                                                        {
+                                                            ++filesDownloaded;
+                                                            FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
+                                                            if (FileExtracted == 0)
+                                                            {
+                                                                Util.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
+                                                                isDownloadSuccess = false;
+                                                            }
+                                                            else
+                                                            {
+                                                                FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
+                                                                filesUpdated = FileProcessed;
+                                                            }
+                                                        }
+                                                        else
+                                                        {
+                                                            Util.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
+                                                            isDownloadSuccess = false;
+                                                        }
+                                                    }
+                                                    while (isDownloadSuccess == false);
+                                                    #endregion
+
+                                                    Console.WriteLine($"\n\n#################################################################\n");
+                                                }
+                                                else
+                                                {
+                                                    Util.WriteLog("Backuping the last version package failed, process aborted..");
+                                                }
+                                            }
                                         }
-                                        while (isDownloadSuccess == false);
-
-                                        ++filesDownloaded;
-                                    }
-
-                                    FileExtracted = Process.SuccessExtractMultipartFilesToTemp(filteredFiles, downloadDirectory, tempDirectory);
-
-                                    if (FileExtracted == 0)
-                                    {
-                                        Helper.WriteLog($"Extracting file failure, retrying to redownload the files..");
-                                        filesDownloaded = 0;
-                                        isDownloadSuccess = false;
-                                    }
-                                    else
-                                    {
-                                        FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
-                                        filesUpdated = FileProcessed;
-                                        isDownloadSuccess = true;
-                                    }
-                                }
-                                while (isDownloadSuccess == false);
-                            }
-                        }
-                        #endregion
-
-                        #region single file handler
-                        else if (filteredFiles.Count > 0)
-                        {
-                            string firstRemoteFile = filteredFiles.First();
-                            string filenameReference = Regex.Replace(firstRemoteFile, @"\d", "");
-                            filenameReference = filenameReference.Replace(".part", "").Replace(".rar", "");
-
-                            foreach (string file in filteredFiles)
-                            {
-                                //StringBuilder sb = new StringBuilder();
-                                //sb.Append(protocol + username + ":" + password + "@" + host + "/" + remoteDirectory + "/" + file);
-                                //string url = sb.ToString();
-
-                                string downloadFilePath = downloadDirectory + file;
-                                string remoteFilePath = remoteDirectory + file;
-
-                                if (existingFiles != null)
-                                {
-                                    if (existingFiles.Count > 1)
-                                    {
-                                        string firstExistingFile = existingFiles.First();
-
-                                        DateTime lastModified = Helper.GetRemoteFileDate(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
-                                        DateTime existingLastModified = File.GetLastWriteTime(firstExistingFile);
-
-                                        if (lastModified > existingLastModified)
+                                        #endregion
+                                        else if (existingFiles.Count == 1)
                                         {
-                                            isBackupSuccess = Process.BackupMultipartFiles(filenameReference, downloadDirectory);
+                                            foreach (var existingFile in existingFiles)
+                                            {
+                                                string existingFilename = existingFile.Replace(downloadDirectory, "");
 
-                                            if (isBackupSuccess)
+                                                if (existingFilename == file)
+                                                {
+                                                    //step 2: checking the version package
+                                                    DateTime lastModified = Helper.GetRemoteFileDate(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+                                                    DateTime existingLastModified = File.GetLastWriteTime(existingFile);
+                                                    Util.WriteLog($"Remote File : {lastModified} <> Local File : {existingLastModified}");
+
+                                                    if (lastModified > existingLastModified)
+                                                    {
+                                                        //step 2.1: backing up the last version package
+                                                        isBackupSuccess = Process.BackupFiles(existingFile, downloadDirectory);
+
+                                                        if (isBackupSuccess)
+                                                        {
+                                                            #region update 270423
+                                                            //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
+                                                            do
+                                                            {
+                                                                //update 050523: implement winscp
+                                                                isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+                                                                if (isDownloadSuccess == true)
+                                                                {
+                                                                    ++filesDownloaded;
+                                                                    FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
+                                                                    if (FileExtracted == 0)
+                                                                    {
+                                                                        Util.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
+                                                                        isDownloadSuccess = false;
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
+                                                                        filesUpdated = FileProcessed;
+                                                                    }
+                                                                }
+                                                                else
+                                                                {
+                                                                    Util.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
+                                                                    isDownloadSuccess = false;
+                                                                }
+                                                            }
+                                                            while (isDownloadSuccess == false);
+                                                            #endregion
+
+                                                            Console.WriteLine($"\n\n#################################################################\n");
+                                                        }
+                                                        else
+                                                        {
+                                                            Util.WriteLog("Backuping the last version package failed, process aborted..");
+                                                        }
+                                                    }
+                                                    else if (lastModified < existingLastModified)
+                                                    {
+                                                        //step 2.2: checking if the existing file had different size due to interruption download process
+                                                        FileInfo fileInfo = new FileInfo(downloadFilePath);
+
+                                                        long remoteFileSize = Helper.GetRemoteFileSize(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+
+                                                        if (fileInfo.Length < remoteFileSize)
+                                                        {
+                                                            Util.WriteLog($"Checking the existing {file} file size and the {file} file at FTP Server..");
+
+                                                            Util.WriteLog($"Existing file: {fileInfo.Length} <> File at FTP Server: {remoteFileSize}");
+
+                                                            Util.WriteLog($"The existing {existingFilename} file size were different, retrying the download process..");
+
+                                                            #region update 270423
+                                                            //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
+                                                            do
+                                                            {
+                                                                isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
+                                                                if (isDownloadSuccess == true)
+                                                                {
+
+                                                                    ++filesDownloaded;
+                                                                    FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
+                                                                    if (FileExtracted == 0)
+                                                                    {
+                                                                        Util.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
+                                                                        isDownloadSuccess = false;
+                                                                    }
+                                                                    else
+                                                                    {
+                                                                        FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
+                                                                        filesUpdated = FileProcessed;
+                                                                    }
+                                                                }
+                                                                else
+                                                                {
+                                                                    Util.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
+                                                                    isDownloadSuccess = false;
+                                                                }
+                                                            }
+                                                            while (isDownloadSuccess == false);
+                                                            #endregion
+
+                                                            Console.WriteLine($"\n\n#################################################################\n");
+                                                        }
+                                                        else
+                                                        {
+                                                            Util.WriteLog($"{existingFilename} file version is the latest, update aborted..");
+                                                        }
+                                                    }
+                                                    else
+                                                    {
+                                                        Util.WriteLog($"{existingFilename} file version is the latest, update aborted..");
+                                                    }
+                                                }
+                                            }
+
+                                            if (!File.Exists(downloadFilePath))
                                             {
                                                 #region update 270423
                                                 //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
                                                 do
                                                 {
-                                                    //update 050523: implement winscp
                                                     isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
                                                     if (isDownloadSuccess == true)
                                                     {
+
                                                         ++filesDownloaded;
                                                         FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
                                                         if (FileExtracted == 0)
                                                         {
-                                                            Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
+                                                            Util.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
                                                             isDownloadSuccess = false;
                                                         }
                                                         else
@@ -392,139 +696,17 @@ namespace FileDownloader
                                                     }
                                                     else
                                                     {
-                                                        Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
+                                                        Util.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
                                                         isDownloadSuccess = false;
                                                     }
                                                 }
                                                 while (isDownloadSuccess == false);
                                                 #endregion
 
-                                                Console.WriteLine($"\n\n#################################################################\n");
-                                            }
-                                            else
-                                            {
-                                                Helper.WriteLog("Backuping the last version package failed, process aborted..");
+                                                Console.WriteLine($"\n#################################################################\n");
                                             }
                                         }
-                                    }
-                                    #endregion
-                                    else if (existingFiles.Count == 1)
-                                    {
-                                        foreach (var existingFile in existingFiles)
-                                        {
-                                            string existingFilename = existingFile.Replace(downloadDirectory, "");
-
-                                            if (existingFilename == file)
-                                            {
-                                                //step 2: checking the version package
-                                                DateTime lastModified = Helper.GetRemoteFileDate(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
-                                                DateTime existingLastModified = File.GetLastWriteTime(existingFile);
-                                                Helper.WriteLog($"Remote File : {lastModified} <> Local File : {existingLastModified}");
-
-                                                if (lastModified > existingLastModified)
-                                                {
-                                                    //step 2.1: backing up the last version package
-                                                    isBackupSuccess = Process.BackupFiles(existingFile, downloadDirectory);
-
-                                                    if (isBackupSuccess)
-                                                    {
-                                                        #region update 270423
-                                                        //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
-                                                        do
-                                                        {
-                                                            //update 050523: implement winscp
-                                                            isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
-                                                            if (isDownloadSuccess == true)
-                                                            {
-                                                                ++filesDownloaded;
-                                                                FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
-                                                                if (FileExtracted == 0)
-                                                                {
-                                                                    Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
-                                                                    isDownloadSuccess = false;
-                                                                }
-                                                                else
-                                                                {
-                                                                    FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
-                                                                    filesUpdated = FileProcessed;
-                                                                }
-                                                            }
-                                                            else
-                                                            {
-                                                                Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
-                                                                isDownloadSuccess = false;
-                                                            }
-                                                        }
-                                                        while (isDownloadSuccess == false);
-                                                        #endregion
-
-                                                        Console.WriteLine($"\n\n#################################################################\n");
-                                                    }
-                                                    else
-                                                    {
-                                                        Helper.WriteLog("Backuping the last version package failed, process aborted..");
-                                                    }
-                                                }
-                                                else if (lastModified < existingLastModified)
-                                                {
-                                                    //step 2.2: checking if the existing file had different size due to interruption download process
-                                                    FileInfo fileInfo = new FileInfo(downloadFilePath);
-
-                                                    long remoteFileSize = Helper.GetRemoteFileSize(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
-
-                                                    if (fileInfo.Length < remoteFileSize)
-                                                    {
-                                                        Helper.WriteLog($"Checking the existing {file} file size and the {file} file at FTP Server..");
-
-                                                        Helper.WriteLog($"Existing file: {fileInfo.Length} <> File at FTP Server: {remoteFileSize}");
-
-                                                        Helper.WriteLog($"The existing {existingFilename} file size were different, retrying the download process..");
-
-                                                        #region update 270423
-                                                        //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
-                                                        do
-                                                        {
-                                                            isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
-                                                            if (isDownloadSuccess == true)
-                                                            {
-
-                                                                ++filesDownloaded;
-                                                                FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
-                                                                if (FileExtracted == 0)
-                                                                {
-                                                                    Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
-                                                                    isDownloadSuccess = false;
-                                                                }
-                                                                else
-                                                                {
-                                                                    FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
-                                                                    filesUpdated = FileProcessed;
-                                                                }
-                                                            }
-                                                            else
-                                                            {
-                                                                Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
-                                                                isDownloadSuccess = false;
-                                                            }
-                                                        }
-                                                        while (isDownloadSuccess == false);
-                                                        #endregion
-
-                                                        Console.WriteLine($"\n\n#################################################################\n");
-                                                    }
-                                                    else
-                                                    {
-                                                        Helper.WriteLog($"{existingFilename} file version is the latest, update aborted..");
-                                                    }
-                                                }
-                                                else
-                                                {
-                                                    Helper.WriteLog($"{existingFilename} file version is the latest, update aborted..");
-                                                }
-                                            }
-                                        }
-
-                                        if (!File.Exists(downloadFilePath))
+                                        else
                                         {
                                             #region update 270423
                                             //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
@@ -538,7 +720,7 @@ namespace FileDownloader
                                                     FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
                                                     if (FileExtracted == 0)
                                                     {
-                                                        Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
+                                                        Util.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
                                                         isDownloadSuccess = false;
                                                     }
                                                     else
@@ -549,7 +731,7 @@ namespace FileDownloader
                                                 }
                                                 else
                                                 {
-                                                    Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
+                                                    Util.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
                                                     isDownloadSuccess = false;
                                                 }
                                             }
@@ -559,6 +741,8 @@ namespace FileDownloader
                                             Console.WriteLine($"\n#################################################################\n");
                                         }
                                     }
+                                    #region test if existing file only 1
+
                                     else
                                     {
                                         #region update 270423
@@ -573,7 +757,7 @@ namespace FileDownloader
                                                 FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
                                                 if (FileExtracted == 0)
                                                 {
-                                                    Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
+                                                    Util.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
                                                     isDownloadSuccess = false;
                                                 }
                                                 else
@@ -584,7 +768,7 @@ namespace FileDownloader
                                             }
                                             else
                                             {
-                                                Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
+                                                Util.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
                                                 isDownloadSuccess = false;
                                             }
                                         }
@@ -594,102 +778,67 @@ namespace FileDownloader
                                         Console.WriteLine($"\n#################################################################\n");
                                     }
                                 }
-                                #region test if existing file only 1
-                                
+                            }
+                            #endregion
+
+                            if (filesDownloaded == 0 && filesUpdated == 0)
+                            {
+                                Util.WriteLog("No files downloaded and updated");
+                                AppData.SuccessProcess = true;
+                            }
+                            else if (FileExtracted > 0 && FileProcessed > 0)
+                            {
+                                if (filesUpdated > 0)
+                                {
+                                    Util.WriteLog($"{filesDownloaded} files downloaded at {downloadDirectory}");
+                                    Util.WriteLog($"{FileProcessed} files updated at {targetDirectory}");
+                                    Util.WriteLog("Update process done");
+                                    AppData.SuccessProcess = true;
+                                }
                                 else
                                 {
-                                    #region update 270423
-                                    //update 270423: separate extract function and cut files function due to issue if the file is opened while updater running
-                                    do
-                                    {
-                                        isDownloadSuccess = Process.DownloadFile(protocol, username, password, host, fingerprint, remoteFilePath, downloadFilePath, file);
-                                        if (isDownloadSuccess == true)
-                                        {
-
-                                            ++filesDownloaded;
-                                            FileExtracted = Process.SuccessExtractFilesToTemp(downloadDirectory, tempDirectory);
-                                            if (FileExtracted == 0)
-                                            {
-                                                Helper.WriteLog($"Extracting file failure, retrying to redownload the file {file}..");
-                                                isDownloadSuccess = false;
-                                            }
-                                            else
-                                            {
-                                                FileProcessed = Process.SuccessCutFilesToTarget(tempDirectory, targetDirectory);
-                                                filesUpdated = FileProcessed;
-                                            }
-                                        }
-                                        else
-                                        {
-                                            Helper.WriteLog($"Downloading file failure, retrying to redownload the file {file}..");
-                                            isDownloadSuccess = false;
-                                        }
-                                    }
-                                    while (isDownloadSuccess == false);
-                                    #endregion
-
-                                    Console.WriteLine($"\n#################################################################\n");
+                                    Util.WriteLog($"{filesDownloaded} files downloaded at {downloadDirectory}");
+                                    Util.WriteLog($"{FileProcessed} files extracted at {targetDirectory}");
+                                    Util.WriteLog("Download process done");
+                                    AppData.SuccessProcess = true;
                                 }
                             }
-                        }
-                        #endregion
-                        if (filesDownloaded == 0 && filesUpdated == 0)
-                        {
-                            Helper.WriteLog("No files downloaded and updated");
+
+                            Util.ClearTempFolder(tempDirectory);
+
                             AppData.SuccessProcess = true;
-                        }
-                        else if (FileExtracted > 0 && FileProcessed > 0)
-                        {
-                            if (filesUpdated > 0)
-                            {
-                                Helper.WriteLog($"{filesDownloaded} files downloaded at {downloadDirectory}");
-                                Helper.WriteLog($"{FileProcessed} files updated at {targetDirectory}");
-                                Helper.WriteLog("Update process done");
-                                AppData.SuccessProcess = true;
-                            }
-                            else
-                            {
-                                Helper.WriteLog($"{filesDownloaded} files downloaded at {downloadDirectory}");
-                                Helper.WriteLog($"{FileProcessed} files extracted at {targetDirectory}");
-                                Helper.WriteLog("Download process done");
-                                AppData.SuccessProcess = true;
-                            }
-                        }
+                            Util.WriteLog($"Process has finished, program will shut down..\n");
+                            Console.WriteLine($"#################################################################\n");
 
-                        Helper.ClearTempFolder(tempDirectory);
+                            isFTPCycleOk = true;
 
-                        AppData.SuccessProcess = true;
-                        Helper.WriteLog($"Process has finished, program will shut down..\n");
-                        Console.WriteLine($"#################################################################\n");
-
-                        isFTPConnectSuccess = true;
-
-                        Thread.Sleep(5000);
-                    }
-                    else
-                    {
-                        Helper.WriteLog("FTP connection error, please recheck the FTP server connection");
-                        DialogResult ans = MessageBox.Show("FTP connection error, please recheck the FTP server connection!",
-                                                "Warning", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                        if (ans == DialogResult.OK)
-                        {
-                            Helper.WriteLog("Retrying connection to FTP server..");
-                            isFTPConnectSuccess = false;
-                            //Helper.WriteLog($"Process aborted, program will shut down..");
-                            //Environment.Exit(0);
+                            Thread.Sleep(5000);
                         }
                         else
                         {
-                            Helper.WriteLog("Retrying connection to FTP server..");
-                            isFTPConnectSuccess = false;
-                            //Helper.WriteLog($"Process aborted, program will shut down..");
-                            //Environment.Exit(0);
-                        }
-                        //Helper.WriteLog($"Process aborted, program will shut down..\n");
+                            Util.WriteLog("FTP connection error, please recheck the FTP server connection");
+                            DialogResult ans = MessageBox.Show("FTP connection error, please recheck the FTP server connection!",
+                                                    "Warning", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            if (ans == DialogResult.OK)
+                            {
+                                Util.WriteLog("Retrying connection to FTP server..");
+                                isFTPCycleOk = false;
+                                //Util.WriteLog($"Process aborted, program will shut down..");
+                                //Environment.Exit(0);
+                            }
+                            else
+                            {
+                                Util.WriteLog("Retrying connection to FTP server..");
+                                isFTPCycleOk = false;
+                                //Util.WriteLog($"Process aborted, program will shut down..");
+                                //Environment.Exit(0);
+                            }
+                            //Util.WriteLog($"Process aborted, program will shut down..\n");
 
-                        //Thread.Sleep(5000);
-                    }
-                } while (isFTPConnectSuccess == false);
+                            //Thread.Sleep(5000);
+                        }
+                    } while (isFTPCycleOk == false);
+                }
 
             }
         }

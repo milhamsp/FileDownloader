@@ -19,74 +19,16 @@ using WinSCP;
 using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 using System.Web.Script.Serialization;
 using POSMainForm.models;
+using System.Runtime.Remoting.Contexts;
+using System.Net.Sockets;
+using DigiCSLiteUpdater;
+using System.Security.Cryptography;
+using DigiCSLiteUpdater.Model;
 
 namespace FileDownloader
 {
     internal class Helper
     {
-        public static string EncodeSpecialChar(string text)
-        {
-            int textLength;
-            string tempText, encodedText;
-            StringBuilder sb = new StringBuilder();
-
-            try
-            {
-                textLength = text.Length;
-                if (textLength > 0)
-                {
-                    for (int i = 0; i < textLength; i++)
-                    {
-                        tempText = text.Substring(i, 1);
-                        switch (tempText)
-                        {
-                            case " ":
-                                tempText = "%20";
-                                break;
-                            case "#":
-                                tempText = "%23";
-                                break;
-                            case "%":
-                                tempText = "%25";
-                                break;
-                            case "+":
-                                tempText = "%2B";
-                                break;
-                            case "/":
-                                tempText = "%2F";
-                                break;
-                            case "@":
-                                tempText = "%40";
-                                break;
-                            case ":":
-                                tempText = "%3A";
-                                break;
-                            case ";":
-                                tempText = "%3B";
-                                break;
-                            default:
-                                tempText = tempText;
-                                break;
-                        }
-                        
-                        sb.Append(tempText);
-                    }
-
-                    encodedText = sb.ToString();
-                    return encodedText;
-                }
-                else
-                {
-                    return text;
-                }
-            }
-            catch(Exception ex)
-            {
-                Helper.WriteLog("EncodeSpecialChar: Error => "+ex.Message);
-                return text;
-            }
-        }
-
         public static bool ReadConfig()
         {
             bool isOk = false;
@@ -99,15 +41,39 @@ namespace FileDownloader
                 FtpConfig.Password = section["Password"].StringValue.Trim();
                 FtpConfig.Host = section["Host"].StringValue.Trim();
                 FtpConfig.Fingerprint = section["Fingerprint"].StringValue.Trim();
-                FtpConfig.RemoteDirectory = section["RemoteDirectory"].StringValue.Trim();
-                FtpConfig.DownloadDirectory = section["DownloadDirectory"].StringValue.Trim();
-                FtpConfig.TempDirectory = section["TempDirectory"].StringValue.Trim();
-                FtpConfig.TargetDirectory = section["TargetDirectory"].StringValue.Trim();
-                FtpConfig.LogDirectory = section["LogDirectory"].StringValue.Trim();
+
+                section = config["FtpConfig"];
+                DirectoryConfig.RemoteDirectory = section["RemoteDirectory"].StringValue.Trim();
+                DirectoryConfig.DownloadDirectory = section["DownloadDirectory"].StringValue.Trim();
+                DirectoryConfig.TempDirectory = section["TempDirectory"].StringValue.Trim();
+                DirectoryConfig.TargetDirectory = section["TargetDirectory"].StringValue.Trim();
+                DirectoryConfig.LogDirectory = section["LogDirectory"].StringValue.Trim();
+                DirectoryConfig.AppExeDirectory = section["AppExeDirectory"].StringValue.Trim();
 
                 section = config["ConnectionConfig"];
                 ConnectionConfig.ConnectionUrl = section["ConnectionUrl"].StringValue.Trim();
+                ConnectionConfig.DownloadTimeoutMinutes = int.Parse(section["DownloadTimeoutMinutes"].StringValue.Trim());
                 ConnectionConfig.PathGetExecTime = section["PathGetExecTime"].StringValue.Trim();
+
+                section = config["ClientConfig"];
+                ClientConfig.Mode = section["Mode"].StringValue.Trim();
+                ClientConfig.IpAddress = Util.GetLocalIpAddress();
+                ClientConfig.Branch = section["Branch"].StringValue.Trim();
+                ClientConfig.Terminal = section["Terminal"].StringValue.Trim();
+                ClientConfig.Outlet = section["Outlet"].StringValue.Trim();
+                ClientConfig.AppVersion = Helper.GetClientVersion(DirectoryConfig.AppExeDirectory);
+
+                bool DoneGetEncKey = PostGetEncKey();
+                if (!DoneGetEncKey)
+                {
+                    isOk = false;
+                }
+
+                bool DoneAuth = PostGetJwtToken();
+                if (!DoneAuth)
+                {
+                    isOk = false;
+                }
 
                 isOk = true;
             }
@@ -211,7 +177,7 @@ namespace FileDownloader
             }
             catch (Exception e)
             {
-                Helper.WriteLog("CheckFTPFiles: Error => " + e.Message);
+                Util.WriteLog("CheckFTPFiles: Error => " + e.Message);
                 return null;
             }
             #endregion
@@ -277,18 +243,18 @@ namespace FileDownloader
                     }
                     else
                     {
-                        Helper.WriteLog("Fingerprint in the Config.ini is empty..");
+                        Util.WriteLog("Fingerprint in the Config.ini is empty..");
                         DialogResult ans = MessageBox.Show("Fingerprint is empty! Please fill the Config.ini file correctly!",
                                             "Warning", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         if (ans == DialogResult.OK)
                         {
-                            Helper.WriteLog($"Process aborted, program will shut down..");
+                            Util.WriteLog($"Process aborted, program will shut down..");
                             Thread.Sleep(5000);
                             Environment.Exit(0);
                         }
                         else
                         {
-                            Helper.WriteLog($"Process aborted, program will shut down..");
+                            Util.WriteLog($"Process aborted, program will shut down..");
                             Thread.Sleep(5000);
                             Environment.Exit(0);
                         }
@@ -319,7 +285,7 @@ namespace FileDownloader
             }
             catch (Exception e)
             {
-                Helper.WriteLog("GetRemoteFileDate: Error => "+e.Message);
+                Util.WriteLog("GetRemoteFileDate: Error => "+e.Message);
                 return lastModified;
             }
         }
@@ -358,18 +324,18 @@ namespace FileDownloader
                     }
                     else
                     {
-                        Helper.WriteLog("Fingerprint in the Config.ini is empty..");
+                        Util.WriteLog("Fingerprint in the Config.ini is empty..");
                         DialogResult ans = MessageBox.Show("Fingerprint is empty! Please fill the Config.ini file correctly!",
                                             "Warning", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         if (ans == DialogResult.OK)
                         {
-                            Helper.WriteLog($"Process aborted, program will shut down..");
+                            Util.WriteLog($"Process aborted, program will shut down..");
                             Thread.Sleep(5000);
                             Environment.Exit(0);
                         }
                         else
                         {
-                            Helper.WriteLog($"Process aborted, program will shut down..");
+                            Util.WriteLog($"Process aborted, program will shut down..");
                             Thread.Sleep(5000);
                             Environment.Exit(0);
                         }
@@ -400,197 +366,13 @@ namespace FileDownloader
             }
             catch (Exception e)
             {
-                Helper.WriteLog("GetRemoteFileSize: Error => "+e.Message);
+                Util.WriteLog("GetRemoteFileSize: Error => "+e.Message);
                 return remoteFileSize;
             }
         }
         #endregion
 
-        #region before
-        //public static DateTime GetFTPFilesVersion(string url)
-        //{
-        //    DateTime lastModified = DateTime.MinValue;
-        //    try
-        //    {
-        //        FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
-        //        request.Method = WebRequestMethods.Ftp.GetDateTimestamp;
-        //        request.Proxy = null;
-
-        //        FtpWebResponse response = (FtpWebResponse)request.GetResponse();
-        //        response.Close();
-
-        //        lastModified = response.LastModified;
-        //        return lastModified;
-        //    }
-        //    catch (Exception e)
-        //    {
-        //        Helper.WriteLog("GetFTPFilesVersion: Error => "+e.Message);
-        //        return lastModified;
-        //    }
-        //}
-        #endregion
-
-        public static bool CheckDirectory(string directory)
-        {
-            bool isOk = false;
-            if (!Directory.Exists(directory))
-            {
-                Console.WriteLine($"{directory} doesn't exist, creating {directory} ");
-                Directory.CreateDirectory(directory);
-                return !isOk;
-            }
-            else if (Directory.Exists(directory))
-            {
-                Console.WriteLine($"{directory} already exist, continuing the process");
-                return !isOk;
-            }
-            else
-            {
-                return isOk;
-            }
-        }
-
-        public static string CheckFolderDate(string path)
-        {
-            string folderPath = "";
-            StringBuilder sbFolder = new StringBuilder(path);
-            DateTime dateTime = DateTime.Now.Date;
-
-            if (CheckDirectory(sbFolder.ToString()))
-            {
-                sbFolder.Append("\\");
-                sbFolder.Append(dateTime.ToString("yyyy"));
-                if (CheckDirectory(sbFolder.ToString()))
-                {
-                    sbFolder.Append("\\");
-                    sbFolder.Append(dateTime.ToString("MM"));
-                    if (CheckDirectory(sbFolder.ToString()))
-                    {
-                        sbFolder.Append("\\");
-                        sbFolder.Append(dateTime.ToString("dd"));
-                        if (CheckDirectory(sbFolder.ToString()))
-                        {
-                            folderPath = sbFolder.ToString();
-                        }
-                    }
-                }
-            }
-
-            return folderPath;
-        }
-
-        public static void WriteLog(string message) { 
-            Console.WriteLine(message);
-
-            string logFolder = FtpConfig.LogDirectory;
-            string currDate = "Log_"+DateTime.Now.ToString("ddMMyy")+".log";
-            string logPath = logFolder + "/" + currDate;
-            
-            try
-            {
-                using (StreamWriter sw = File.AppendText(logPath))
-                {
-                    LogFormat(message, sw);
-                }
-            }
-            catch(Exception ex)
-            {
-                Console.WriteLine("LogWrite: Error => " + ex.Message);
-            }
-        }
-
-        public static void LogFormat(string logMessage, TextWriter tw)
-        {
-            try
-            {
-                System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
-                //string pdi = currentProcess.Id.ToString();
-                //string pname = currentProcess.ProcessName;
-                string currDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-
-                //tw.Write($"[{currDate}] [{pdi}] [{pname}] ");
-                tw.Write($"[{currDate}] ");
-                tw.WriteLine($": {logMessage}");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Log: Error => " + ex.Message);
-            }
-        }
-
-        public static void ClearLog(string directory) 
-        {
-            string[] files = Directory.GetFiles(directory);
-            foreach (string file in files)
-            {
-                File.Delete(file);
-            }
-        }
-
-        public static void ClearTempFolder(string directory)
-        {
-            DirectoryInfo tempDirPath = new DirectoryInfo(directory);
-            Helper.WriteLog("Clearing Temp folder..");
-
-            foreach (FileInfo file in tempDirPath.GetFiles())
-            {
-                Helper.WriteLog($"Deleting file {directory+file}..");
-                file.Delete();
-            }
-
-            foreach (DirectoryInfo dir in tempDirPath.GetDirectories())
-            {
-                Helper.WriteLog($"Deleting directory {directory+dir}..");
-                dir.Delete(true);
-            }
-        }
-
-
-        #region DIGICSLITE
-        public static bool getExecDatetime()
-        {
-            try
-            {
-                WriteLog("Req Get Exec Datetime : " + MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathGetExecTime);
-                var _ = getToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathGetExecTime);
-
-                JavaScriptSerializer js = new JavaScriptSerializer();
-                js = new JavaScriptSerializer();
-                var _rspExecTime = js.Deserialize<RspAll<DropdownPropVM>>(_);
-
-                /* RESPONSE GET HUB PEMILIK DANA OK */
-                if (_rspExecTime != null && _rspExecTime.code != null && _rspExecTime.code.Equals("00"))
-                {
-                    for (int i = 0; i < _rspExecTime.data.Count; i++)
-                    {
-                        //listPendidikan.Add(_rspEncKey.data[i].code + "-" + _rspEncKey.data[i].name.Trim());
-                        string val = _rspExecTime.data[i].name.Trim();
-                        if (!string.IsNullOrWhiteSpace(val))
-                        {
-                            Data.ExecTime = val;
-                        }
-                    }
-                    
-                    WriteLog("Resp Get Exec Time : " + _);
-                    return true;
-
-                }
-                else
-                {
-                    WriteLog("Resp Get Exec Time : " + _); 
-                    return false;
-                }
-
-
-            }
-            catch (Exception ex)
-            {
-                WriteLog("Error :" + ex.Message);
-                return false;
-            }
-
-        }
-
+        #region update 081225 : add utils from digicslite
         public static string MaskedBaseUrl(string url)
         {
             string maskedUrl = url;
@@ -615,26 +397,747 @@ namespace FileDownloader
             }
         }
 
-        public static string getToMiddleWare(string url)
+        public static string EncryptData(string text)
         {
-            string contents = "";
             try
             {
-                HttpClient httpClient = new HttpClient();
-                // httpClient.Timeout = TimeSpan.FromSeconds(60);
-                Uri uri = new Uri(url);
-                httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+                if (!string.IsNullOrEmpty(text) && text.Length > 4)
+                {
+                    text.Trim();
+                    string firstSegment = text.Substring(0, 4);
+                    int textLength = text.Length;
+                    string trimmedText = text.Substring(textLength - (textLength - 4), textLength - 4);
 
-                var response = httpClient.GetAsync(uri).GetAwaiter().GetResult();
-                contents = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+                    using (TripleDES tripleDes = TripleDES.Create())
+                    {
+                        tripleDes.Key = Encoding.UTF8.GetBytes(AppData.Key);
+                        tripleDes.IV = Encoding.UTF8.GetBytes(AppData.Iv);
+                        tripleDes.Mode = CipherMode.CBC;
+                        tripleDes.Padding = PaddingMode.PKCS7;
 
+                        using (ICryptoTransform encryptor = tripleDes.CreateEncryptor())
+                        {
+                            using (MemoryStream memoryStream = new MemoryStream())
+                            {
+                                using (CryptoStream cryptoStream = new CryptoStream(memoryStream, encryptor, CryptoStreamMode.Write))
+                                {
+                                    byte[] toEncrypt = Encoding.UTF8.GetBytes(trimmedText);
+                                    cryptoStream.Write(toEncrypt, 0, toEncrypt.Length);
+                                }
+                                return string.Concat(firstSegment, Convert.ToBase64String(memoryStream.ToArray()));
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    return text;
+                }
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                //System.Windows.MessageBox.Show(e.Message, "Error", (MessageBoxButton)MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Util.WriteLog($"Error => Encrypt String {text}, {ex.Message}");
+                return text;
             }
-            return contents;
         }
+
+        public static string DecryptData(string encryptedText)
+        {
+            try
+            {
+                if (!string.IsNullOrEmpty(encryptedText) && encryptedText.Length > 4)
+                {
+                    string firstSegment = encryptedText.Substring(0, 4);
+                    string encryptedSegment = encryptedText.Substring(4);
+
+                    byte[] encryptedBytes = Convert.FromBase64String(encryptedSegment);
+
+                    using (TripleDES tripleDes = TripleDES.Create())
+                    {
+                        tripleDes.Key = Encoding.UTF8.GetBytes(AppData.Key);
+                        tripleDes.IV = Encoding.UTF8.GetBytes(AppData.Iv);
+                        tripleDes.Mode = CipherMode.CBC;
+                        tripleDes.Padding = PaddingMode.PKCS7;
+
+                        using (ICryptoTransform decryptor = tripleDes.CreateDecryptor())
+                        {
+                            using (MemoryStream memoryStream = new MemoryStream(encryptedBytes))
+                            {
+                                using (CryptoStream cryptoStream = new CryptoStream(memoryStream, decryptor, CryptoStreamMode.Read))
+                                {
+                                    using (StreamReader streamReader = new StreamReader(cryptoStream))
+                                    {
+                                        string decrypted = streamReader.ReadToEnd();
+                                        return string.Concat(firstSegment, decrypted);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    return encryptedText;
+                }
+            }
+            catch (Exception ex)
+            {
+                Util.WriteLog($"Error => Decrypt String {encryptedText}, {ex.Message}");
+                return encryptedText;
+            }
+        }
+        #endregion
+
+        #region before
+        //public static DateTime GetFTPFilesVersion(string url)
+        //{
+        //    DateTime lastModified = DateTime.MinValue;
+        //    try
+        //    {
+        //        FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
+        //        request.Method = WebRequestMethods.Ftp.GetDateTimestamp;
+        //        request.Proxy = null;
+
+        //        FtpWebResponse response = (FtpWebResponse)request.GetResponse();
+        //        response.Close();
+
+        //        lastModified = response.LastModified;
+        //        return lastModified;
+        //    }
+        //    catch (Exception e)
+        //    {
+        //        Util.WriteLog("GetFTPFilesVersion: Error => "+e.Message);
+        //        return lastModified;
+        //    }
+        //}
+        #endregion
+
+        #region http endpoint update
+        public static (bool, RspCheckUpdate) CheckClientUpdates(string url, string strReq)
+        {
+            RspCheckUpdate rsp = new RspCheckUpdate();
+            try
+            {
+                using (HttpClient httpClient = new HttpClient())
+                {
+                    double timeoutSetup = ConnectionConfig.DownloadTimeoutMinutes > 0
+                        ? ConnectionConfig.DownloadTimeoutMinutes : 30; //default 30 minutes timeout downloading
+                    httpClient.Timeout = TimeSpan.FromMinutes(ConnectionConfig.DownloadTimeoutMinutes);
+
+                    var request = new HttpRequestMessage(HttpMethod.Post, url);
+                    request.Headers.Accept.Add(
+                        new MediaTypeWithQualityHeaderValue("application/json"));
+
+                    //add auth
+                    if (!string.IsNullOrEmpty(AppData.Token))
+                    request.Headers.Authorization =
+                        new AuthenticationHeaderValue("Bearer", AppData.Token);
+
+                    request.Content = new StringContent(
+                            strReq,
+                            Encoding.UTF8,
+                            "application/json"
+                        );
+
+                    using (var response = httpClient.SendAsync(
+                        request,
+                        HttpCompletionOption.ResponseHeadersRead
+                    ).GetAwaiter().GetResult())
+                    {
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            bool retry = (int)response.StatusCode >= 500;
+
+                            rsp.Success = false;
+                            rsp.Message = retry ? "Internal server error" : "Client error";
+
+                            return (retry, rsp); //retry if 500 error
+                        }
+
+                        //check content type
+                        var contentType = response.Content.Headers.ContentType?.MediaType;
+
+                        if (!string.IsNullOrEmpty(contentType) &&
+                            contentType.Contains("application/json"))
+                        {
+                            string strRsp = response.Content
+                                       .ReadAsStringAsync()
+                                       .GetAwaiter()
+                                       .GetResult();
+
+                            if (!string.IsNullOrEmpty(strRsp))
+                            {
+                                Util.WriteLog($"Rsp Check Update : " + strRsp);
+
+                                JavaScriptSerializer js = new JavaScriptSerializer();
+                                var rspJson = js.Deserialize<RspSingle<object>>(strRsp);
+
+                                if (rspJson != null && rspJson.code.Equals("00"))
+                                {
+                                    rsp.Success = false;
+                                    rsp.Message = rspJson.message;
+                                    rsp.HasUpdate = false;
+
+                                    return (true, rsp); //no update
+                                }
+                            }
+                            else
+                            {
+                                rsp.Success = false;
+                                rsp.Message = "Invalid response format";
+
+                                return (false, rsp); //retry due to corrupted response
+                            }
+                        }
+
+                        //file response
+                        long? expectedSize = response.Content.Headers.ContentLength;
+                        if (!expectedSize.HasValue || expectedSize <= 0)
+                        {
+                            rsp.Success = false;
+                            rsp.Message = "File size error";
+                            rsp.HasUpdate = true;
+
+                            return (true, rsp); //no retry
+                        }
+
+                        if (!response.Headers.TryGetValues("X-File-Hash", out var hashValues))
+                        {
+                            rsp.Success = false;
+                            rsp.Message = "File hash error";
+                            rsp.HasUpdate = true;
+
+                            return (true, rsp); //no retry
+                        }
+
+                        string expectedHash = hashValues.FirstOrDefault();
+                        if (string.IsNullOrEmpty(expectedHash))
+                        {
+                            rsp.Success = false;
+                            rsp.Message = "File hash empty";
+                            rsp.HasUpdate = true;
+
+                            return (true, rsp); //no retry
+                        }
+
+                        if (response.Content.Headers.ContentDisposition != null)
+                        {
+                            string fileName = response.Content.Headers.ContentDisposition.FileNameStar 
+                                ?? response.Content.Headers.ContentDisposition.FileName;
+
+                            if (!string.IsNullOrEmpty(fileName))
+                            {
+                                // sanitize filename
+                                fileName = fileName.Trim('"').Replace("\\", "").Replace("/", "");
+
+                                string tempFile = Path.Combine(
+                                    DirectoryConfig.DownloadDirectory, fileName +
+                                    ".tmp"
+                                );
+
+                                using (var responseStream = response.Content
+                                    .ReadAsStreamAsync()
+                                    .GetAwaiter()
+                                    .GetResult())
+                                using (var fileStream = new FileStream(
+                                    tempFile,
+                                    FileMode.Create,
+                                    FileAccess.Write,
+                                    FileShare.None))
+                                {
+                                    responseStream.CopyTo(fileStream);
+                                }
+
+                                //validate file size
+                                FileInfo fi = new FileInfo(tempFile);
+                                if (fi.Length != expectedSize.Value)
+                                {
+                                    File.Delete(tempFile);
+
+                                    rsp.Success = false;
+                                    rsp.Message = "File size mismatch";
+                                    rsp.HasUpdate = true;
+
+                                    return (false, rsp); //retry
+                                }
+
+                                //validate hash
+                                string actualHash = ComputeSha256(tempFile);
+                                if (!actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    File.Delete(tempFile);
+
+                                    rsp.Success = false;
+                                    rsp.Message = "File not valid, hash not match";
+                                    rsp.HasUpdate = true;
+
+                                    return (true, rsp); //no retry
+                                }
+
+                                //renaming file
+                                string finalFile = Path.Combine(
+                                    DirectoryConfig.DownloadDirectory,
+                                    fileName + ".downloaded"
+                                );
+
+                                if (File.Exists(finalFile))
+                                    File.Delete(finalFile);
+
+                                File.Move(tempFile, finalFile);
+
+                                rsp.Success = true;
+                                rsp.HasUpdate = true;
+                                rsp.Message = "File successfully downloaded";
+
+                                return (true, rsp);
+                            }
+                        }
+
+                        rsp.Success = false;
+                        rsp.Message = "Filename empty";
+
+                        return (false, rsp);
+                    }
+                }
+            }
+            catch (TaskCanceledException)
+            {
+                rsp.Success = false;
+                rsp.Message = "Error : CheckClientUpdates => Timeout reached";
+                return (false, rsp);
+            }
+            catch (HttpRequestException)
+            {
+                rsp.Success = false;
+                rsp.Message = "Error : CheckClientUpdates => Network error";
+                return (false, rsp);
+            }
+            catch (IOException ex)
+            {
+                rsp.Success = false;
+                rsp.Message = $"Error : CheckClientUpdates => {ex.Message}";
+                return (true, rsp); //no retry
+            }
+            catch (Exception ex)
+            {
+                rsp.Success = false;
+                rsp.Message = $"Error : CheckClientUpdates => {ex.Message}";
+                return (true, rsp); //no retry
+            }
+        }
+
+        public static string SendToMiddleWare(string url, HttpMethod method, string strReq = "")
+        {
+            try
+            {
+                using (HttpClient httpClient = new HttpClient())
+                {
+                    var request = new HttpRequestMessage(method, url);
+
+                    request.Headers.Accept.Add(
+                        new MediaTypeWithQualityHeaderValue("application/json")
+                    );
+
+                    //add auth
+                    if (!string.IsNullOrEmpty(AppData.Token))
+                        request.Headers.Authorization =
+                            new AuthenticationHeaderValue("Bearer", AppData.Token);
+
+                    if (!string.IsNullOrEmpty(strReq) && method != HttpMethod.Get)
+                    {
+                        request.Content = new StringContent(
+                            strReq,
+                            Encoding.UTF8,
+                            "application/json"
+                        );
+                    }
+
+                    using (var response = httpClient.SendAsync(request)
+                                                    .GetAwaiter()
+                                                    .GetResult())
+                    {
+                        if (!response.IsSuccessStatusCode)
+                            return null;
+
+                        return response.Content
+                                       .ReadAsStringAsync()
+                                       .GetAwaiter()
+                                       .GetResult();
+                    }
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public static string GetClientVersion(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                return "0.0.0.0";
+
+            var info = System.Diagnostics.FileVersionInfo.GetVersionInfo(path);
+            return info.FileVersion ?? "0.0.0.0";
+        }
+
+        private static string ComputeSha256(string filePath)
+        {
+            using (var sha256 = SHA256.Create())
+            using (var stream = File.OpenRead(filePath))
+            {
+                var hash = sha256.ComputeHash(stream);
+                return BitConverter.ToString(hash)
+                    .Replace("-", "")
+                    .ToLowerInvariant();
+            }
+        }
+
+        public static bool IsAddressAvailable(string address)
+        {
+            try
+            {
+                System.Net.WebClient client = new WebClient();
+                byte[] bytes = client.DownloadData(address);
+                if (bytes.Length > 0)
+                {
+                    string result = System.Text.Encoding.UTF8.GetString(bytes);
+                    // FlexibleMessageBox.Show(result);
+                    return true;
+                }
+
+            }
+            catch
+            {
+                Util.WriteLog($"Connection failed to Remote : {address}");
+                return false;
+            }
+            return false;
+        }
+        #endregion
+
+        #region REQUEST
+        public static string GenReqGetToken()
+        {
+
+            string strReq = "";
+            ReqHeaderAuth req = null;
+            DateTime dateTime = DateTime.UtcNow.Date;
+
+            try
+            {
+                req = new ReqHeaderAuth();
+
+                //generate random 6 digit w/ every 1 changed to 9
+                Random rnd = new Random();
+                int number = rnd.Next(100000, 1000000);
+
+                string result = number.ToString().Replace('1', '9');
+
+                //generate 2 minute expiry time
+                long nowMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                long expMillis = nowMillis + (2 * 60 * 1000);
+
+                string expiryStr = expMillis.ToString();
+
+                string key = $"{result}" +
+                    $"-{ClientConfig.Branch}" +
+                    $"-{ClientConfig.Outlet}" +
+                    $"-{ClientConfig.Branch}" +
+                    $"-{expiryStr}" +
+                    $"-{ClientConfig.Terminal}";
+
+                //encrypt key
+                key = EncryptData(key);
+
+                //encode to base64
+                byte[] bytes = Encoding.UTF8.GetBytes(key);
+
+                string b64key = Convert.ToBase64String(bytes);
+
+                req.key = b64key;
+
+                strReq = new JavaScriptSerializer().Serialize(req);
+
+            }
+            catch (Exception ex)
+            {
+                Util.WriteLog("Error :" + ex.Message);
+            }
+            return strReq;
+
+        }
+        
+        public static string GenReqCheckUpdate()
+        {
+
+            string strReq = "";
+            ReqCheckUpdate req = null;
+            DateTime dateTime = DateTime.UtcNow.Date;
+
+            try
+            {
+                req = new ReqCheckUpdate();
+
+                req.ipAddress = ClientConfig.IpAddress;
+                req.lastVersion = ClientConfig.AppVersion;
+
+                strReq = new JavaScriptSerializer().Serialize(req);
+
+            }
+            catch (Exception ex)
+            {
+                Util.WriteLog("Error :" + ex.Message);
+            }
+            return strReq;
+
+        }
+        
+        public static string GenReqUpdateStatus(int step)
+        {
+
+            string strReq = "";
+            ReqUpdateStatus req = null;
+            DateTime dateTime = DateTime.UtcNow.Date;
+
+            try
+            {
+                req = new ReqUpdateStatus();
+
+                req.ipAddress = ClientConfig.IpAddress;
+                if (step == 3)
+                    req.lastVersion = GetClientVersion(DirectoryConfig.AppExeDirectory);
+                else
+                    req.lastVersion = ClientConfig.AppVersion;
+                req.step = step;
+
+                strReq = new JavaScriptSerializer().Serialize(req);
+
+            }
+            catch (Exception ex)
+            {
+                Util.WriteLog("GenReqUpdateStatus: Error => " + ex.Message);
+            }
+            return strReq;
+
+        }
+        #endregion
+
+        #region HIT TO ENDPOINT
+        private static bool PostGetEncKey()
+        {
+            try
+            {
+                Util.WriteLog("Req Get Enc Key : " + Helper.MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathGetEncKey);
+                var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathGetEncKey, HttpMethod.Post);
+
+                JavaScriptSerializer js = new JavaScriptSerializer();
+                js = new JavaScriptSerializer();
+                var _rspEncKey = js.Deserialize<RspAll<DropdownPropVM>>(_);
+
+                if (_rspEncKey != null && _rspEncKey.code != null && _rspEncKey.code.Equals("00"))
+                {
+                    for (int i = 0; i < _rspEncKey.data.Count; i++)
+                    {
+                        string val = _rspEncKey.data[i].name.Trim();
+                        if (!string.IsNullOrWhiteSpace(val))
+                        {
+                            var split = val.Split('-');
+
+                            AppData.Key = split[0];
+                            AppData.Iv = split[1];
+                        }
+                    }
+
+                    string _log = EncryptData(_);
+                    if (_log != null)
+                    {
+                        var _rspEncKeyLog = js.Deserialize<RspAll<DropdownPropVM>>(_);
+                        if (_rspEncKeyLog.code.Equals("00"))
+                        {
+                            for (int i = 0; i < _rspEncKeyLog.data.Count; i++)
+                            {
+                                string val = _rspEncKeyLog.data[i].name.Trim();
+                                if (!string.IsNullOrWhiteSpace(val))
+                                {
+                                    _rspEncKeyLog.data[i].name = Helper.EncryptData(val);
+                                }
+                            }
+                        }
+
+                        _log = js.Serialize(_rspEncKeyLog);
+                        Util.WriteLog("Resp Get Enc Key : " + _log);
+                    }
+
+                    return true;
+                }
+                else
+                {
+                   Util.WriteLog("Resp Get Enc Key : " + _);
+                }
+
+
+            }
+            catch (Exception ex)
+            {
+                Util.WriteLog("PostGetEncKey: Error => " + ex.Message);
+                return false;
+            }
+
+            return false;
+        }
+
+        private static bool PostGetJwtToken()
+        {
+            try
+            {
+                string strReq = GenReqGetToken();
+
+                Util.WriteLog($"Req Get Token : " + Helper.MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathAuth 
+                    + "==>\n" + strReq);
+                var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathAuth, HttpMethod.Post, strReq);
+
+                if (string.IsNullOrEmpty(_))
+                    return false;
+
+                Util.WriteLog($"Res Get Token : " + _);
+
+                JavaScriptSerializer js = new JavaScriptSerializer();
+                var rsp = js.Deserialize<RspSingle<FmtAuthToken>>(_);
+
+                if (rsp.code != null && rsp.code.Equals("00"))
+                {
+                    AppData.Token = rsp.data.token;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+               Util.WriteLog("PostGetJwtToken: Error => " + ex.Message);
+            }
+
+            return true;
+        }
+
+        public static bool PostGetExecDatetime()
+        {
+            try
+            {
+               Util.WriteLog("Req Get Exec Datetime : " + MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathGetExecTime);
+                var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathGetExecTime, HttpMethod.Post);
+
+                JavaScriptSerializer js = new JavaScriptSerializer();
+                js = new JavaScriptSerializer();
+                var _rspExecTime = js.Deserialize<RspAll<DropdownPropVM>>(_);
+
+                if (_rspExecTime != null && _rspExecTime.code != null && _rspExecTime.code.Equals("00"))
+                {
+                    for (int i = 0; i < _rspExecTime.data.Count; i++)
+                    {
+                        string val = _rspExecTime.data[i].name.Trim();
+                        if (!string.IsNullOrWhiteSpace(val))
+                        {
+                            AppData.ExecTime = val;
+                        }
+                    }
+                    
+                   Util.WriteLog("Resp Get Exec Time : " + _);
+                    return true;
+
+                }
+                else
+                {
+                   Util.WriteLog("Resp Get Exec Time : " + _); 
+                    return false;
+                }
+
+
+            }
+            catch (Exception ex)
+            {
+               Util.WriteLog("PostGetExecDatetime: Error => " + ex.Message);
+                return false;
+            }
+
+        }
+
+        public static (bool, RspCheckUpdate) PostCheckUpdate()
+        {
+            bool status;
+            RspCheckUpdate rsp = new RspCheckUpdate();
+
+            try
+            {
+                //step 2.1: generate req
+                string strReq = GenReqCheckUpdate();
+
+                Util.WriteLog($"Req Check Update : " + Helper.MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathCheckVersion
+                    + "==>\n" + strReq);
+
+                //step 2.2: loop hit to endpoint while status equals false
+                do
+                {
+                    (status, rsp) =
+                        CheckClientUpdates(
+                            ConnectionConfig.ConnectionUrl + ConnectionConfig.PathCheckVersion,
+                            strReq);
+
+                    if (!status)
+                        Thread.Sleep(5000); //delay for 5 sec
+
+                }
+                while (!status);
+
+                return (rsp.Success, rsp);
+            }
+            catch (Exception ex)
+            {
+                Util.WriteLog("PostCheckUpdate: Error => " + ex.Message);
+            }
+
+            return (true, rsp);
+        }
+        
+        public static bool PostUpdateStatus(int step)
+        {
+            try
+            {
+                //step 3.1: generate req
+                string strReq = GenReqUpdateStatus(step);
+
+                Util.WriteLog($"Req Update Status : " + Helper.MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathUpdateStep
+                    + "==>\n" + strReq);
+
+                var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathAuth, HttpMethod.Post, strReq);
+
+                if (string.IsNullOrEmpty(_))
+                    return false;
+
+                Util.WriteLog($"Res Update Status : " + _);
+
+                JavaScriptSerializer js = new JavaScriptSerializer();
+                var rsp = js.Deserialize<RspSingle<FmtAuthToken>>(_);
+
+                if (rsp.code != null && rsp.code.Equals("00"))
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                Util.WriteLog("PostUpdateStatus: Error => " + ex.Message);
+            }
+
+            return true;
+        }
+
         #endregion
     }
 }

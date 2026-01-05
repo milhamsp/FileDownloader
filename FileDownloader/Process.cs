@@ -14,6 +14,7 @@ using System.Threading;
 using WinSCP;
 using System.Security.Policy;
 using System.Text.RegularExpressions;
+using DigiCSLiteUpdater;
 
 namespace FileDownloader
 {
@@ -27,7 +28,7 @@ namespace FileDownloader
         //    {
         //        try
         //        {
-        //            Helper.WriteLog($"Downloading {file} from FTP Server {remoteServer} and updating {downloadFilePath}..");
+        //            Util.WriteLog($"Downloading {file} from FTP Server {remoteServer} and updating {downloadFilePath}..");
 
         //            FtpWebRequest request = (FtpWebRequest)WebRequest.Create(url);
         //            request.Method = WebRequestMethods.Ftp.DownloadFile;
@@ -49,7 +50,7 @@ namespace FileDownloader
         //                }
         //            }
 
-        //            Helper.WriteLog($"Download file {file} done");
+        //            Util.WriteLog($"Download file {file} done");
 
         //            request = (FtpWebRequest)WebRequest.Create(url);
         //            request.Method = WebRequestMethods.Ftp.GetFileSize;
@@ -61,25 +62,25 @@ namespace FileDownloader
 
         //            response.Close();
 
-        //            Helper.WriteLog($"Checking the downloaded {file} file size and the {file} file at FTP Server..");
+        //            Util.WriteLog($"Checking the downloaded {file} file size and the {file} file at FTP Server..");
 
-        //            Helper.WriteLog($"Downloaded file: {fileInfo.Length} <> File at FTP Server: {response.ContentLength}");
+        //            Util.WriteLog($"Downloaded file: {fileInfo.Length} <> File at FTP Server: {response.ContentLength}");
 
         //            if (fileInfo.Length != response.ContentLength)
         //            {
-        //                Helper.WriteLog($"The downloaded {file} file size were different, retrying the download process..");
+        //                Util.WriteLog($"The downloaded {file} file size were different, retrying the download process..");
         //                return isOk;
         //            }
         //            else
         //            {
-        //                Helper.WriteLog($"The downloaded {file} file size are the same");
+        //                Util.WriteLog($"The downloaded {file} file size are the same");
         //                return !isOk;
         //            }
         //        }
         //        catch (Exception e)
         //        {
-        //            Helper.WriteLog("DownloadFile: Error => "+e.Message);
-        //            Helper.WriteLog("Retrying the download process.. ");
+        //            Util.WriteLog("DownloadFile: Error => "+e.Message);
+        //            Util.WriteLog("Retrying the download process.. ");
         //            return isOk;
         //        }
         //    }
@@ -98,7 +99,7 @@ namespace FileDownloader
             {
                 try
                 {
-                    Helper.WriteLog($"Downloading {remoteFilename} from FTP Server {host} and updating {downloadFilePath}..");
+                    Util.WriteLog($"Downloading {remoteFilename} from FTP Server {host} and updating {downloadFilePath}..");
                     if (protocol == "sftp://")
                     {
                         if (fingerprint != string.Empty || fingerprint != null)
@@ -159,23 +160,23 @@ namespace FileDownloader
                                     }
                                 }
                                 
-                                Helper.WriteLog($"Download file {remoteFilename} done");
+                                Util.WriteLog($"Download file {remoteFilename} done");
 
                                 FileInfo fileInfo = new FileInfo(downloadFilePath);
 
-                                Helper.WriteLog($"Checking the downloaded {remoteFilename} file size and the {remoteFilename} file at FTP Server..");
+                                Util.WriteLog($"Checking the downloaded {remoteFilename} file size and the {remoteFilename} file at FTP Server..");
 
-                                Helper.WriteLog($"Downloaded file: {fileInfo.Length} bytes <> File at FTP Server: {remoteFileSize} bytes");
+                                Util.WriteLog($"Downloaded file: {fileInfo.Length} bytes <> File at FTP Server: {remoteFileSize} bytes");
 
                                 if (fileInfo.Length != remoteFileSize)
                                 {
-                                    Helper.WriteLog($"The downloaded {remoteFilename} file size were different, retrying the download process..");
+                                    Util.WriteLog($"The downloaded {remoteFilename} file size were different, retrying the download process..");
                                     session.Close();
                                     return isOk;
                                 }
                                 else
                                 {
-                                    Helper.WriteLog($"The downloaded {remoteFilename} file size are the same");
+                                    Util.WriteLog($"The downloaded {remoteFilename} file size are the same");
                                     session.Close();
                                     return !isOk;
                                 }
@@ -183,18 +184,18 @@ namespace FileDownloader
                         }
                         else
                         {
-                            Helper.WriteLog("Fingerprint in the Config.ini is empty..");
+                            Util.WriteLog("Fingerprint in the Config.ini is empty..");
                             DialogResult ans = MessageBox.Show("Fingerprint is empty! Please fill the Config.ini file correctly!",
                                                 "Warning", MessageBoxButtons.OK, MessageBoxIcon.Error);
                             if (ans == DialogResult.OK)
                             {
-                                Helper.WriteLog($"Process aborted, program will shut down..");
+                                Util.WriteLog($"Process aborted, program will shut down..");
                                 Thread.Sleep(5000);
                                 Environment.Exit(0);
                             }
                             else
                             {
-                                Helper.WriteLog($"Process aborted, program will shut down..");
+                                Util.WriteLog($"Process aborted, program will shut down..");
                                 Thread.Sleep(5000);
                                 Environment.Exit(0);
                             }
@@ -234,23 +235,23 @@ namespace FileDownloader
                                 }
                             }
 
-                            Helper.WriteLog($"Download file {remoteFilename} done");
+                            Util.WriteLog($"Download file {remoteFilename} done");
 
                             FileInfo fileInfo = new FileInfo(downloadFilePath);
 
-                            Helper.WriteLog($"Checking the downloaded {remoteFilename} file size and the {remoteFilename} file at FTP Server..");
+                            Util.WriteLog($"Checking the downloaded {remoteFilename} file size and the {remoteFilename} file at FTP Server..");
 
-                            Helper.WriteLog($"Downloaded file: {fileInfo.Length} bytes <> File at FTP Server: {remoteFileSize} bytes");
+                            Util.WriteLog($"Downloaded file: {fileInfo.Length} bytes <> File at FTP Server: {remoteFileSize} bytes");
 
                             if (fileInfo.Length != remoteFileSize)
                             {
-                                Helper.WriteLog($"The downloaded {remoteFilename} file size were different, retrying the download process..");
+                                Util.WriteLog($"The downloaded {remoteFilename} file size were different, retrying the download process..");
                                 session.Close();
                                 return isOk;
                             }
                             else
                             {
-                                Helper.WriteLog($"The downloaded {remoteFilename} file size are the same");
+                                Util.WriteLog($"The downloaded {remoteFilename} file size are the same");
                                 session.Close();
                             }
                         }
@@ -260,8 +261,8 @@ namespace FileDownloader
                 }
                 catch (Exception e)
                 {
-                    Helper.WriteLog("DownloadFile: Error => "+e.Message);
-                    Helper.WriteLog("Retrying the download process.. ");
+                    Util.WriteLog("DownloadFile: Error => "+e.Message);
+                    Util.WriteLog("Retrying the download process.. ");
                     return isOk;
                 }
             }
@@ -303,14 +304,14 @@ namespace FileDownloader
                             //                if (File.Exists(targetDirectory+fileEntry.FullName))
                             //                {
                             //                    //Console.WriteLine($"Replacing {fileEntry.FullName} in {targetDirectory}{fileEntry.FullName}");
-                            //                    Helper.WriteLog($"Replacing {fileEntry.FullName} in {targetDirectory}{fileEntry.FullName}");
+                            //                    Util.WriteLog($"Replacing {fileEntry.FullName} in {targetDirectory}{fileEntry.FullName}");
                             //                    File.Delete(targetDirectory+fileEntry.FullName);
                             //                    fileEntry.ExtractToFile(targetDirectory+fileEntry.FullName);
                             //                }
                             //                else
                             //                {
                             //                    //Console.WriteLine($"Extracting {fileEntry.FullName} in {targetDirectory}{fileEntry.FullName}");
-                            //                    Helper.WriteLog($"Extracting {fileEntry.FullName} in {targetDirectory}{fileEntry.FullName}");
+                            //                    Util.WriteLog($"Extracting {fileEntry.FullName} in {targetDirectory}{fileEntry.FullName}");
                             //                    fileEntry.ExtractToFile(targetDirectory+fileEntry.FullName);
                             //                }
                             //            }
@@ -337,7 +338,7 @@ namespace FileDownloader
                         }
                         else
                         {
-                            Helper.WriteLog($"Copying {filename} to {targetDirectory}");
+                            Util.WriteLog($"Copying {filename} to {targetDirectory}");
                             Console.WriteLine($"\n#################################################################\n");
                             File.Copy(tempDirectory+filename, targetDirectory+filename, true);
                         }
@@ -347,7 +348,7 @@ namespace FileDownloader
             }
             catch (Exception e)
             {
-                Helper.WriteLog("ExtractCopy: Error => " + e.Message);
+                Util.WriteLog("ExtractCopy: Error => " + e.Message);
                 return isOk;
             }
         }
@@ -368,7 +369,7 @@ namespace FileDownloader
                         if (filename.Contains(".zip"))
                         {
                             //Console.WriteLine($"Opening file {filename}");
-                            Helper.WriteLog($"Opening file {filename}");
+                            Util.WriteLog($"Opening file {filename}");
                             //using (FileStream zipFile = new FileStream(downloadDirectory+filename, FileMode.Open))
                             //{
                             //    using (ZipArchive archive = new ZipArchive(zipFile, ZipArchiveMode.Update))
@@ -376,7 +377,7 @@ namespace FileDownloader
                             //        foreach (ZipArchiveEntry fileEntry in archive.Entries)
                             //        {
                             //            //Console.WriteLine($"Extracting {fileEntry.FullName} in {tempDirectory}{fileEntry.FullName}");
-                            //            Helper.WriteLog($"Extracting {fileEntry.FullName} at {tempDirectory}{fileEntry.FullName}");
+                            //            Util.WriteLog($"Extracting {fileEntry.FullName} at {tempDirectory}{fileEntry.FullName}");
                             //            fileEntry.ExtractToFile(tempDirectory+fileEntry.FullName);
                             //        }
                             //    }
@@ -402,7 +403,7 @@ namespace FileDownloader
                         }
                         else if (filename.Contains(".rar"))
                         {
-                            Helper.WriteLog($"Extracting {filename} to {tempDirectory}");
+                            Util.WriteLog($"Extracting {filename} to {tempDirectory}");
                             using (var archive = RarArchive.Open(downloadedFile))
                             {
                                 foreach (var entry in archive.Entries.Where(entry => !entry.IsDirectory))
@@ -417,7 +418,7 @@ namespace FileDownloader
                         }
                         else
                         {
-                            Helper.WriteLog($"Copying {filename} to {tempDirectory}");
+                            Util.WriteLog($"Copying {filename} to {tempDirectory}");
                             Console.WriteLine($"\n#################################################################\n");
                             File.Copy(downloadDirectory+filename, tempDirectory+filename, true);
                         }
@@ -450,23 +451,23 @@ namespace FileDownloader
                             //step 5 : replacing outdated file in targetSubDirectory
                             if(targetLastModified.ToString() == "1/1/1601 7:00:00 AM")
                             {
-                                Helper.WriteLog($"Copying file {filename} in {targetDirectory+tempSubDir+filename}");
+                                Util.WriteLog($"Copying file {filename} in {targetDirectory+tempSubDir+filename}");
                                 File.Copy(tempSubFile, targetDirectory+tempSubDir+filename, true);
-                                Helper.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
+                                Util.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
                                 File.Delete(tempDirectory+tempSubDir+filename);
                             }
                             else
                             {
                                 if (tempLastModified > targetLastModified)
                                 {
-                                    Helper.WriteLog($"Replacing file {filename} in {targetDirectory+tempSubDir+filename}");
+                                    Util.WriteLog($"Replacing file {filename} in {targetDirectory+tempSubDir+filename}");
                                     File.Copy(tempSubFile, targetDirectory+tempSubDir+filename, true);
-                                    Helper.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
+                                    Util.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
                                     File.Delete(tempDirectory+tempSubDir+filename);
                                 }
                                 else
                                 {
-                                    Helper.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+tempSubDir+filename}");
+                                    Util.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+tempSubDir+filename}");
                                     File.Delete(tempDirectory+tempSubDir+filename);
                                 }
                             }
@@ -487,23 +488,23 @@ namespace FileDownloader
                         //step 7 : replacing outdated files in targetDirectory
                         if (targetLastModified.ToString() == "1/1/1601 7:00:00 AM")
                         {
-                            Helper.WriteLog($"Copying file {filename} in {targetDirectory+filename}");
+                            Util.WriteLog($"Copying file {filename} in {targetDirectory+filename}");
                             File.Copy(tempFile, targetDirectory+filename, true);
-                            Helper.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
+                            Util.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
                             File.Delete(tempDirectory+filename);
                         }
                         else
                         {
                             if (tempLastModified > targetLastModified)
                             {
-                                Helper.WriteLog($"Replacing file {filename} in {targetDirectory+filename}");
+                                Util.WriteLog($"Replacing file {filename} in {targetDirectory+filename}");
                                 File.Copy(tempFile, targetDirectory+filename, true);
-                                Helper.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
+                                Util.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
                                 File.Delete(tempDirectory+filename);
                             }
                             else
                             {
-                                Helper.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+filename}");
+                                Util.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+filename}");
                                 File.Delete(tempDirectory+filename);
                             }
                         }
@@ -517,8 +518,8 @@ namespace FileDownloader
             catch (Exception e)
             {
                 //Console.WriteLine(e.Message);
-                //Helper.WriteLog("ExtractCutFilesToTarget: Error => " + e.Message);
-                Helper.WriteLog("ExtractFiles: Error => " + e.Message);
+                //Util.WriteLog("ExtractCutFilesToTarget: Error => " + e.Message);
+                Util.WriteLog("ExtractFiles: Error => " + e.Message);
                 return isOk;
             }
         }
@@ -540,7 +541,7 @@ namespace FileDownloader
                         if (filename.Contains(".zip"))
                         {
                             //Console.WriteLine($"Opening file {filename}");
-                            Helper.WriteLog($"Extracting file {filename}");
+                            Util.WriteLog($"Extracting file {filename}");
                             //using (FileStream zipFile = new FileStream(downloadDirectory+filename, FileMode.Open))
                             //{
                             //    using (ZipArchive archive = new ZipArchive(zipFile, ZipArchiveMode.Update))
@@ -548,7 +549,7 @@ namespace FileDownloader
                             //        foreach (ZipArchiveEntry fileEntry in archive.Entries)
                             //        {
                             //            //Console.WriteLine($"Extracting {fileEntry.FullName} in {tempDirectory}{fileEntry.FullName}");
-                            //            Helper.WriteLog($"Extracting {fileEntry.FullName} at {tempDirectory}{fileEntry.FullName}");
+                            //            Util.WriteLog($"Extracting {fileEntry.FullName} at {tempDirectory}{fileEntry.FullName}");
                             //            fileEntry.ExtractToFile(tempDirectory+fileEntry.FullName);
                             //        }
                             //    }
@@ -572,7 +573,7 @@ namespace FileDownloader
                         }
                         else if (filename.Contains(".rar"))
                         {
-                            Helper.WriteLog($"Extracting {filename} to {tempDirectory}");
+                            Util.WriteLog($"Extracting {filename} to {tempDirectory}");
                             using (var archive = RarArchive.Open(downloadedFile))
                             {
                                 foreach (var entry in archive.Entries.Where(entry => !entry.IsDirectory))
@@ -587,7 +588,7 @@ namespace FileDownloader
                         }
                         else
                         {
-                            Helper.WriteLog($"Copying {filename} to {tempDirectory}");
+                            Util.WriteLog($"Copying {filename} to {tempDirectory}");
                             Console.WriteLine($"\n#################################################################\n");
                             File.Copy(downloadDirectory+filename, tempDirectory+filename, true);
                         }
@@ -620,9 +621,9 @@ namespace FileDownloader
                             //step 5 : replacing outdated file in targetSubDirectory
                             if (targetLastModified.ToString() == "1/1/1601 7:00:00 AM")
                             {
-                                Helper.WriteLog($"Copying file {filename} in {targetDirectory+tempSubDir+filename}");
+                                Util.WriteLog($"Copying file {filename} in {targetDirectory+tempSubDir+filename}");
                                 File.Copy(tempSubFile, targetDirectory+tempSubDir+filename, true);
-                                Helper.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
+                                Util.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
                                 File.Delete(tempDirectory+tempSubDir+filename);
                                 ++isExtracted;
                             }
@@ -630,15 +631,15 @@ namespace FileDownloader
                             {
                                 if (tempLastModified > targetLastModified)
                                 {
-                                    Helper.WriteLog($"Replacing file {filename} in {targetDirectory+tempSubDir+filename}");
+                                    Util.WriteLog($"Replacing file {filename} in {targetDirectory+tempSubDir+filename}");
                                     File.Copy(tempSubFile, targetDirectory+tempSubDir+filename, true);
-                                    Helper.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
+                                    Util.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
                                     File.Delete(tempDirectory+tempSubDir+filename);
                                     ++isExtracted;
                                 }
                                 else
                                 {
-                                    Helper.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+tempSubDir+filename}");
+                                    Util.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+tempSubDir+filename}");
                                     File.Delete(tempDirectory+tempSubDir+filename);
                                 }
                             }
@@ -659,9 +660,9 @@ namespace FileDownloader
                         //step 7 : replacing outdated files in targetDirectory
                         if (targetLastModified.ToString() == "1/1/1601 7:00:00 AM")
                         {
-                            Helper.WriteLog($"Copying file {filename} in {targetDirectory+filename}");
+                            Util.WriteLog($"Copying file {filename} in {targetDirectory+filename}");
                             File.Copy(tempFile, targetDirectory+filename, true);
-                            Helper.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
+                            Util.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
                             File.Delete(tempDirectory+filename);
                             ++isExtracted;
                         }
@@ -669,15 +670,15 @@ namespace FileDownloader
                         {
                             if (tempLastModified > targetLastModified)
                             {
-                                Helper.WriteLog($"Replacing file {filename} in {targetDirectory+filename}");
+                                Util.WriteLog($"Replacing file {filename} in {targetDirectory+filename}");
                                 File.Copy(tempFile, targetDirectory+filename, true);
-                                Helper.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
+                                Util.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
                                 File.Delete(tempDirectory+filename);
                                 ++isExtracted;
                             }
                             else
                             {
-                                Helper.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+filename}");
+                                Util.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+filename}");
                                 File.Delete(tempDirectory+filename);
                             }
                         }
@@ -691,8 +692,8 @@ namespace FileDownloader
             catch (Exception e)
             {
                 //Console.WriteLine(e.Message);
-                //Helper.WriteLog("ExtractCutFilesToTarget: Error => " + e.Message);
-                Helper.WriteLog("ExtractFiles: Error => " + e.Message);
+                //Util.WriteLog("ExtractCutFilesToTarget: Error => " + e.Message);
+                Util.WriteLog("ExtractFiles: Error => " + e.Message);
                 return isExtracted;
             }
         }
@@ -717,7 +718,7 @@ namespace FileDownloader
                         if (filename.Contains(".zip"))
                         {
                             //Console.WriteLine($"Opening file {filename}");
-                            Helper.WriteLog($"Extracting file {filename}");
+                            Util.WriteLog($"Extracting file {filename}");
 
                             //update 180423: implement sharpcompress for zip extraction
                             using (var zip = ZipArchive.Open(downloadedFile))
@@ -738,7 +739,7 @@ namespace FileDownloader
                         }
                         else if (filename.Contains(".rar"))
                         {
-                            Helper.WriteLog($"Extracting {filename} to {tempDirectory}");
+                            Util.WriteLog($"Extracting {filename} to {tempDirectory}");
                             using (var archive = RarArchive.Open(downloadedFile))
                             {
                                 foreach (var entry in archive.Entries.Where(entry => !entry.IsDirectory))
@@ -752,13 +753,17 @@ namespace FileDownloader
                             }
                             ++isExtracted;
                         }
+                        else
+                        {
+                            Util.WriteLog($"File was not .zip or .rar");
+                        }
                     }
                 }
                 return isExtracted;
             }
             catch (Exception e)
             {
-                Helper.WriteLog("ExtractFiles: Error => " + e.Message);
+                Util.WriteLog("ExtractFiles: Error => " + e.Message);
                 isExtracted = 0;
                 return isExtracted;
             }
@@ -799,15 +804,15 @@ namespace FileDownloader
                             {
                                 try
                                 {
-                                    Helper.WriteLog($"Copying file {filename} in {targetDirectory+tempSubDir+filename}");
+                                    Util.WriteLog($"Copying file {filename} in {targetDirectory+tempSubDir+filename}");
                                     File.Copy(tempSubFile, targetDirectory+tempSubDir+filename, true);
-                                    Helper.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
+                                    Util.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
                                     File.Delete(tempDirectory+tempSubDir+filename);
                                     ++isUpdated;
                                 }
                                 catch (Exception e)
                                 {
-                                    Helper.WriteLog("CopyFiles: Error => " + e.Message);
+                                    Util.WriteLog("CopyFiles: Error => " + e.Message);
                                 }
                             }
                             else
@@ -818,28 +823,28 @@ namespace FileDownloader
                                     {
                                         try
                                         {
-                                            Helper.WriteLog($"Replacing file {filename} in {targetDirectory+tempSubDir+filename}");
+                                            Util.WriteLog($"Replacing file {filename} in {targetDirectory+tempSubDir+filename}");
                                             File.Copy(tempSubFile, targetDirectory+tempSubDir+filename, true);
-                                            Helper.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
+                                            Util.WriteLog($"Deleting file {filename} in {tempDirectory+tempSubDir+filename}");
                                             File.Delete(tempDirectory+tempSubDir+filename);
                                             ++isUpdated;
                                             isOk = true;
                                         }
                                         catch (Exception e)
                                         {
-                                            Helper.WriteLog("ReplaceFiles: Error => " + e.Message);
+                                            Util.WriteLog("ReplaceFiles: Error => " + e.Message);
                                             DialogResult ans = MessageBox.Show("Please close the DigiCSLite app and its related files to continue the update process!",
                                                 "Warning", MessageBoxButtons.OK, MessageBoxIcon.Error);
                                             if (ans == DialogResult.OK)
                                             {
                                                 isOk = false;
-                                                //Helper.WriteLog($"Process aborted, program will shut down..\n");
+                                                //Util.WriteLog($"Process aborted, program will shut down..\n");
                                                 //Environment.Exit(0);
                                             }
                                             else
                                             {
                                                 isOk = false;
-                                                //Helper.WriteLog($"Process aborted, program will shut down..\n");
+                                                //Util.WriteLog($"Process aborted, program will shut down..\n");
                                                 //Environment.Exit(0);
                                             }
                                         }
@@ -848,7 +853,7 @@ namespace FileDownloader
                                 }
                                 else
                                 {
-                                    Helper.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+tempSubDir+filename}");
+                                    Util.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+tempSubDir+filename}");
                                     File.Delete(tempDirectory+tempSubDir+filename);
                                 }
                             }
@@ -874,15 +879,15 @@ namespace FileDownloader
                         {
                             try
                             {
-                                Helper.WriteLog($"Copying file {filename} in {targetDirectory+filename}");
+                                Util.WriteLog($"Copying file {filename} in {targetDirectory+filename}");
                                 File.Copy(tempFile, targetDirectory+filename, true);
-                                Helper.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
+                                Util.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
                                 File.Delete(tempDirectory+filename);
                                 ++isUpdated;
                             }
                             catch (Exception e)
                             {
-                                Helper.WriteLog("CopyFiles: Error => " + e.Message);
+                                Util.WriteLog("CopyFiles: Error => " + e.Message);
                             }
                         }
                         else
@@ -893,28 +898,28 @@ namespace FileDownloader
                                 {
                                     try
                                     {
-                                        Helper.WriteLog($"Replacing file {filename} in {targetDirectory+filename}");
+                                        Util.WriteLog($"Replacing file {filename} in {targetDirectory+filename}");
                                         File.Copy(tempFile, targetDirectory+filename, true);
-                                        Helper.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
+                                        Util.WriteLog($"Deleting file {filename} in {tempDirectory+filename}");
                                         File.Delete(tempDirectory+filename);
                                         ++isUpdated;
                                         isOk = true;
                                     }
                                     catch (Exception e)
                                     {
-                                        Helper.WriteLog("ReplaceFiles: Error => " + e.Message);
+                                        Util.WriteLog("ReplaceFiles: Error => " + e.Message);
                                         DialogResult ans = MessageBox.Show("Please close the DigiCSLite app and its related files to continue the update process!",
                                                 "Warning", MessageBoxButtons.OK, MessageBoxIcon.Error);
                                         if (ans == DialogResult.OK)
                                         {
                                             isOk = false;
-                                            //Helper.WriteLog($"Process aborted, program will shut down..");
+                                            //Util.WriteLog($"Process aborted, program will shut down..");
                                             //Environment.Exit(0);
                                         }
                                         else
                                         {
                                             isOk = false;
-                                            //Helper.WriteLog($"Process aborted, program will shut down..");
+                                            //Util.WriteLog($"Process aborted, program will shut down..");
                                             //Environment.Exit(0);
                                         }
                                     }
@@ -923,7 +928,7 @@ namespace FileDownloader
                             }
                             else
                             {
-                                Helper.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+filename}");
+                                Util.WriteLog($"{filename} file version is the latest, deleting the extracted {filename} in {tempDirectory+filename}");
                                 File.Delete(tempDirectory+filename);
                             }
                         }
@@ -948,7 +953,7 @@ namespace FileDownloader
             try
             {
                 filename = Regex.Replace(files.First(), @"\d", "*");
-                Helper.WriteLog($"Extracting {filename} and other parts to {tempDirectory}");
+                Util.WriteLog($"Extracting {filename} and other parts to {tempDirectory}");
                 using (var archive = RarArchive.Open(files.ToArray().Select(s => Path.Combine(downloadDirectory, s)).Select(File.OpenRead)))
                 {
                     foreach (var entry in archive.Entries.Where(entry => !entry.IsDirectory))
@@ -965,7 +970,7 @@ namespace FileDownloader
             }
             catch(Exception e)
             {
-                Helper.WriteLog("ExtractFiles: Error => " + e.Message);
+                Util.WriteLog("ExtractFiles: Error => " + e.Message);
                 isExtracted = 0;
                 return isExtracted;
             }
@@ -974,7 +979,18 @@ namespace FileDownloader
         public static bool BackupMultipartFiles(string filenameReference, string downloadDirectory)
         {
             bool isOk = false;
-            string[] existingFiles = Directory.GetFiles(downloadDirectory);
+            //string[] existingFiles = Directory.GetFiles(downloadDirectory);
+
+            //update 081225 : filter backup file by extension
+            List<string> existingFiles = Directory.GetFiles(downloadDirectory)
+            .Where(file =>
+            {
+                string ext = Path.GetExtension(file);
+                return !ext.Equals(".tmp", StringComparison.OrdinalIgnoreCase)
+                && !ext.Equals(".downloaded", StringComparison.OrdinalIgnoreCase);
+            })
+            .ToList();
+
             List<string> backupFiles = new List<string>();
             
             try
@@ -983,14 +999,17 @@ namespace FileDownloader
                 {
                     foreach (var file in existingFiles)
                     {
-                        string existingFilename = file.Replace(downloadDirectory, "");
+                        //string existingFilename = file.Replace(downloadDirectory, "");
+
+                        //update 081225 : filter backup file by extension
+                        string existingFilename = Path.GetFileName(file);
                         if (existingFilename.Contains(filenameReference))
                         {
                             backupFiles.Add(file);
                         }
                     }
 
-                    Helper.WriteLog("Backing up the last version package process started..");
+                    Util.WriteLog("Backing up the last version package process started..");
 
                     string subDirectoryName;
                     string currDate = DateTime.Now.ToString("ddMM");
@@ -1000,7 +1019,7 @@ namespace FileDownloader
                         foreach (var otherDirectory in otherDirectories)
                         {
                             subDirectoryName = otherDirectory.Replace(downloadDirectory, "");
-                            Helper.WriteLog($"Deleting directory and files in {otherDirectory}");
+                            Util.WriteLog($"Deleting directory and files in {otherDirectory}");
                             //Console.WriteLine($"Deleting directory and files in {downloadDirectory+subDirectoryName}");
                             //delete existing backup directory
                             Directory.Delete(otherDirectory, true);
@@ -1016,7 +1035,7 @@ namespace FileDownloader
                     foreach (var file in backupFiles)
                     {
                         string existingFilename = file.Replace(downloadDirectory, "");
-                        Helper.WriteLog($"Backing up file to {downloadDirectory+currDate}\\{existingFilename}");
+                        Util.WriteLog($"Backing up file to {downloadDirectory+currDate}\\{existingFilename}");
                         //copy backup directory
                         File.Copy(file, downloadDirectory+currDate+"\\"+existingFilename, true);
                         File.Delete(downloadDirectory+existingFilename);
@@ -1026,14 +1045,14 @@ namespace FileDownloader
                 }
                 else
                 {
-                    Helper.WriteLog($"There are no files in {downloadDirectory}");
+                    Util.WriteLog($"There are no files in {downloadDirectory}");
                     return isOk;
                 }
             }
             catch (Exception e)
             {
                 //Console.WriteLine(e.Message);
-                Helper.WriteLog("BackupFiles: Error => "+e.Message);
+                Util.WriteLog("BackupFiles: Error => "+e.Message);
                 return isOk;
             }
         }
@@ -1054,7 +1073,7 @@ namespace FileDownloader
                 //}
                 if (File.Exists(existingFile))
                 {
-                    Helper.WriteLog("Backing up the last version package process started..");
+                    Util.WriteLog("Backing up the last version package process started..");
                     string subDirectoryName;
                     string currDate = DateTime.Now.ToString("ddMM");
                     string[] otherDirectories = Directory.GetDirectories(downloadDirectory);
@@ -1063,14 +1082,14 @@ namespace FileDownloader
                         foreach (var otherDirectory in otherDirectories)
                         {
                             subDirectoryName = otherDirectory.Replace(downloadDirectory, "");
-                            Helper.WriteLog($"Deleting directory and files in {otherDirectory}");
+                            Util.WriteLog($"Deleting directory and files in {otherDirectory}");
                             //Console.WriteLine($"Deleting directory and files in {downloadDirectory+subDirectoryName}");
                             //delete existing backup directory
                             Directory.Delete(otherDirectory, true);
                         }
                     }
                     //Console.WriteLine($"Backing up file to {downloadDirectory+currDate}/{existingFilename}");
-                    Helper.WriteLog($"Backing up file to {downloadDirectory+currDate}/{existingFilename}");
+                    Util.WriteLog($"Backing up file to {downloadDirectory+currDate}/{existingFilename}");
                     //create backup directory
                     Directory.CreateDirectory(downloadDirectory+currDate);
                     //copy backup directory
@@ -1081,7 +1100,7 @@ namespace FileDownloader
             catch (Exception e)
             {
                 //Console.WriteLine(e.Message);
-                Helper.WriteLog("BackupFiles: Error => "+e.Message);
+                Util.WriteLog("BackupFiles: Error => "+e.Message);
                 return isOk;
             }
         }

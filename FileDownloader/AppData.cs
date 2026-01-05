@@ -9,5 +9,9 @@ namespace DigiCSLiteUpdater
     internal class AppData
     {
         public static bool SuccessProcess {  get; set; }
+        public static string Token { get; set; }
+        public static string Key { get; set; }
+        public static string Iv { get; set; }
+        public static string ExecTime { get; set; }
     }
 }

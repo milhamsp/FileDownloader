@@ -97,15 +97,22 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AppData.cs" />
+    <Compile Include="Config\DirectoryConfig.cs" />
     <Compile Include="Config\ConnectionConfig.cs" />
     <Compile Include="Config\FtpConfig.cs" />
+    <Compile Include="Config\ClientConfig.cs" />
     <Compile Include="Helper.cs" />
     <Compile Include="Model\DropdownVM.cs" />
+    <Compile Include="Model\ReqHeader.cs" />
+    <Compile Include="Model\ReqMonitoringTerminal.cs" />
     <Compile Include="Model\RspAll.cs" />
     <Compile Include="Model\RspErr.cs" />
+    <Compile Include="Model\RspSearch.cs" />
+    <Compile Include="Model\RspSingle.cs" />
     <Compile Include="Process.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Util.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
