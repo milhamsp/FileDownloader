@@ -15,8 +15,8 @@ namespace DigiCSLiteUpdater.Config
 
         public static string PathGetExecTime = "/util/getbygroup/EXECTIME";
         public static string PathGetEncKey = "/util/getbygroup/ENCKEY";
-        public static string PathCheckVersion = "/updates/check";
-        public static string PathUpdateStep = "/updates/status";
+        public static string PathCheckVersion = "/monitoringterminal/updates/check";
+        public static string PathUpdateStep = "/monitoringterminal/updates/status";
         public static string PathAuth = "/auth/get-token";
     }
 }

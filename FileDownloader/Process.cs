@@ -15,6 +15,8 @@ using WinSCP;
 using System.Security.Policy;
 using System.Text.RegularExpressions;
 using DigiCSLiteUpdater;
+using DigiCSLiteUpdater.Config;
+using System.Net.Http;
 
 namespace FileDownloader
 {
@@ -713,7 +715,10 @@ namespace FileDownloader
                     //step 1 : extract file to tempDirectory
                     foreach (var downloadedFile in downloadedFiles)
                     {
-                        string filename = downloadedFile.Replace(downloadDirectory, "");
+                        //string filename = downloadedFile.Replace(downloadDirectory, "");
+
+                        //update 070126 : get filename
+                        string filename = Path.GetFileName(downloadedFile);
 
                         if (filename.Contains(".zip"))
                         {
@@ -1193,6 +1198,117 @@ namespace FileDownloader
 
             }
             return !isOk;
+        }
+
+        private static void DownloadWithProgress(
+            Stream source,
+            Stream destination,
+            long expectedSize)
+        {
+            byte[] buffer = new byte[10240]; // 10 KB
+            long totalRead = 0;
+            int read;
+
+            while ((read = source.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                destination.Write(buffer, 0, read);
+                totalRead += read;
+
+                if (expectedSize > 0)
+                {
+                    double percent = (double)totalRead / expectedSize * 100;
+                    Console.Write($"\rDownloading: {percent:0.00}% ({totalRead}/{expectedSize} bytes)");
+                }
+                else
+                {
+                    Console.Write($"\rDownloaded {totalRead} bytes");
+                }
+            }
+
+            Console.WriteLine($"\nDownloaded {totalRead} bytes"); // newline after finish
+        }
+
+
+        public static (bool ok, string error, long size, string hash) ValidateFileHeaders(HttpResponseMessage response)
+        {
+            try
+            {
+                if (!response.Content.Headers.ContentLength.HasValue ||
+                response.Content.Headers.ContentLength <= 0)
+                    return (false, "File size error", 0, null);
+
+                if (!response.Headers.TryGetValues("X-File-Hash", out var hashes))
+                    return (false, "File hash error", 0, null);
+
+                var hash = hashes.FirstOrDefault();
+                if (string.IsNullOrEmpty(hash))
+                    return (false, "File hash empty", 0, null);
+
+                return (true, null, response.Content.Headers.ContentLength.Value, hash);
+            }
+            catch (Exception ex)
+            {
+                Util.WriteLog($"ValidateFileHeader: Error => {ex.Message}");
+                return (false, ex.Message, 0, null);
+            }
+        }
+
+        public static (bool success, string message) ResponseDownloadFile(
+            HttpResponseMessage response,
+            string fileName,
+            long expectedSize,
+            string expectedHash)
+        {
+            try
+            {
+                fileName = fileName.Trim('"').Replace("\\", "").Replace("/", "");
+
+                string tempFile = Path.Combine(
+                    DirectoryConfig.DownloadDirectory,
+                    fileName + ".tmp");
+
+                using (var responseStream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult())
+                using (var fileStream = new FileStream(
+                    tempFile,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.None,
+                    81920,
+                    FileOptions.SequentialScan))
+                {
+                    //responseStream.CopyTo(fileStream);
+                    DownloadWithProgress(responseStream, fileStream, expectedSize);
+                }
+
+                if (new FileInfo(tempFile).Length != expectedSize)
+                {
+                    File.Delete(tempFile);
+                    return (false, "File size mismatch");
+                }
+
+                string actualHash = Helper.ComputeSha256(tempFile);
+                if (!actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
+                {
+                    File.Delete(tempFile);
+                    return (false, "File hash mismatch");
+                }
+
+                string finalFile = Path.Combine(
+                    DirectoryConfig.DownloadDirectory,
+                    fileName + ".downloaded");
+
+                if (File.Exists(finalFile))
+                    File.Delete(finalFile);
+
+                File.Move(tempFile, finalFile);
+
+                return (true, "File successfully downloaded");
+            }
+            catch (Exception ex)
+            {
+                Util.WriteLog($"ResponseDownloadFile: Error => {ex.Message}");
+                return (false, ex.Message);
+            }
         }
     }
 }

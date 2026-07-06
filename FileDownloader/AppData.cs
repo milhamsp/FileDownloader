@@ -13,5 +13,6 @@ namespace DigiCSLiteUpdater
         public static string Key { get; set; }
         public static string Iv { get; set; }
         public static string ExecTime { get; set; }
+        public static readonly string RunId = Guid.NewGuid().ToString("N");
     }
 }

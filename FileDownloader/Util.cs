@@ -7,6 +7,8 @@ using System.Net.Sockets;
 using System.Net;
 using System.Text;
 using System.Threading.Tasks;
+using DigiCSLiteUpdater.Config;
+using SharpCompress.Common;
 
 namespace DigiCSLiteUpdater
 {
@@ -61,11 +63,53 @@ namespace DigiCSLiteUpdater
             return folderPath;
         }
 
+        public static bool RenameFile(string downloadDirectory)
+        {
+            try
+            {
+                //update 081225 : filter backup file by extension
+                List<string> downloadedFiles = Directory.GetFiles(downloadDirectory)
+                .Where(file => 
+                    Path.GetExtension(file).Equals(".downloaded", StringComparison.OrdinalIgnoreCase)
+                )
+                .ToList();
+
+                if (downloadedFiles.Count > 0)
+                {
+                    foreach (string filePath in downloadedFiles)
+                    {
+                        string directory = Path.GetDirectoryName(filePath);
+                        string filenameWithoutExt = Path.GetFileNameWithoutExtension(filePath);
+
+                        string newPath = Path.Combine(directory, filenameWithoutExt);
+
+                        Util.WriteLog($"Renaming file from {filePath} to {newPath}");
+
+                        if (File.Exists(newPath))
+                        {
+                            Util.WriteLog($"Deleting existing file on {newPath}");
+                            File.Delete(newPath);
+                        }
+
+                        File.Move(filePath, newPath);
+                    }
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Util.WriteLog($"RenameFile => error: {ex.Message}");
+                return false;
+            }
+        }
+
+
         public static void WriteLog(string message)
         {
             Console.WriteLine(message);
 
-            string logFolder = FtpConfig.LogDirectory;
+            string logFolder = DirectoryConfig.LogDirectory;
             string currDate = "Log_" + DateTime.Now.ToString("ddMMyy") + ".log";
             string logPath = logFolder + "/" + currDate;
 
@@ -86,13 +130,14 @@ namespace DigiCSLiteUpdater
         {
             try
             {
-                System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
+                //System.Diagnostics.Process currentProcess = System.Diagnostics.Process.GetCurrentProcess();
                 //string pdi = currentProcess.Id.ToString();
                 //string pname = currentProcess.ProcessName;
                 string currDate = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                //update 050126: add guid
 
                 //tw.Write($"[{currDate}] [{pdi}] [{pname}] ");
-                tw.Write($"[{currDate}] ");
+                tw.Write($"[{currDate}] [{AppData.RunId}] ");
                 tw.WriteLine($": {logMessage}");
             }
             catch (Exception ex)

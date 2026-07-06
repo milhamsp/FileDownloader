@@ -42,7 +42,7 @@ namespace FileDownloader
                 FtpConfig.Host = section["Host"].StringValue.Trim();
                 FtpConfig.Fingerprint = section["Fingerprint"].StringValue.Trim();
 
-                section = config["FtpConfig"];
+                section = config["DirectoryConfig"];
                 DirectoryConfig.RemoteDirectory = section["RemoteDirectory"].StringValue.Trim();
                 DirectoryConfig.DownloadDirectory = section["DownloadDirectory"].StringValue.Trim();
                 DirectoryConfig.TempDirectory = section["TempDirectory"].StringValue.Trim();
@@ -53,7 +53,7 @@ namespace FileDownloader
                 section = config["ConnectionConfig"];
                 ConnectionConfig.ConnectionUrl = section["ConnectionUrl"].StringValue.Trim();
                 ConnectionConfig.DownloadTimeoutMinutes = int.Parse(section["DownloadTimeoutMinutes"].StringValue.Trim());
-                ConnectionConfig.PathGetExecTime = section["PathGetExecTime"].StringValue.Trim();
+                //ConnectionConfig.PathGetExecTime = section["PathGetExecTime"].StringValue.Trim();
 
                 section = config["ClientConfig"];
                 ClientConfig.Mode = section["Mode"].StringValue.Trim();
@@ -63,16 +63,18 @@ namespace FileDownloader
                 ClientConfig.Outlet = section["Outlet"].StringValue.Trim();
                 ClientConfig.AppVersion = Helper.GetClientVersion(DirectoryConfig.AppExeDirectory);
 
-                bool DoneGetEncKey = PostGetEncKey();
+                bool DoneGetEncKey = GetEncKey();
                 if (!DoneGetEncKey)
                 {
                     isOk = false;
+                    return isOk;
                 }
 
                 bool DoneAuth = PostGetJwtToken();
                 if (!DoneAuth)
                 {
                     isOk = false;
+                    return isOk;
                 }
 
                 isOk = true;
@@ -436,7 +438,7 @@ namespace FileDownloader
             }
             catch (Exception ex)
             {
-                Util.WriteLog($"Error => Encrypt String {text}, {ex.Message}");
+                Util.WriteLog($"EncryptData: Error => Encrypt String {text}, {ex.Message}");
                 return text;
             }
         }
@@ -482,7 +484,7 @@ namespace FileDownloader
             }
             catch (Exception ex)
             {
-                Util.WriteLog($"Error => Decrypt String {encryptedText}, {ex.Message}");
+                Util.WriteLog($"DecryptData: Error => Decrypt String {encryptedText}, {ex.Message}");
                 return encryptedText;
             }
         }
@@ -522,7 +524,7 @@ namespace FileDownloader
                 {
                     double timeoutSetup = ConnectionConfig.DownloadTimeoutMinutes > 0
                         ? ConnectionConfig.DownloadTimeoutMinutes : 30; //default 30 minutes timeout downloading
-                    httpClient.Timeout = TimeSpan.FromMinutes(ConnectionConfig.DownloadTimeoutMinutes);
+                    httpClient.Timeout = TimeSpan.FromMinutes(timeoutSetup);
 
                     var request = new HttpRequestMessage(HttpMethod.Post, url);
                     request.Headers.Accept.Add(
@@ -591,31 +593,13 @@ namespace FileDownloader
                         }
 
                         //file response
-                        long? expectedSize = response.Content.Headers.ContentLength;
-                        if (!expectedSize.HasValue || expectedSize <= 0)
+                        rsp.HasUpdate = true;
+
+                        var headerMetadata = Process.ValidateFileHeaders(response);
+                        if (!headerMetadata.ok)
                         {
-                            rsp.Success = false;
-                            rsp.Message = "File size error";
-                            rsp.HasUpdate = true;
-
-                            return (true, rsp); //no retry
-                        }
-
-                        if (!response.Headers.TryGetValues("X-File-Hash", out var hashValues))
-                        {
-                            rsp.Success = false;
-                            rsp.Message = "File hash error";
-                            rsp.HasUpdate = true;
-
-                            return (true, rsp); //no retry
-                        }
-
-                        string expectedHash = hashValues.FirstOrDefault();
-                        if (string.IsNullOrEmpty(expectedHash))
-                        {
-                            rsp.Success = false;
-                            rsp.Message = "File hash empty";
-                            rsp.HasUpdate = true;
+                            rsp.Message = headerMetadata.error;
+                            rsp.Success = headerMetadata.ok;
 
                             return (true, rsp); //no retry
                         }
@@ -627,69 +611,14 @@ namespace FileDownloader
 
                             if (!string.IsNullOrEmpty(fileName))
                             {
-                                // sanitize filename
-                                fileName = fileName.Trim('"').Replace("\\", "").Replace("/", "");
+                                var rspFile = Process.ResponseDownloadFile(response, fileName,
+                                    headerMetadata.size, headerMetadata.hash);
 
-                                string tempFile = Path.Combine(
-                                    DirectoryConfig.DownloadDirectory, fileName +
-                                    ".tmp"
-                                );
+                                rsp.Success = rspFile.success;
+                                rsp.Message = rspFile.message;
 
-                                using (var responseStream = response.Content
-                                    .ReadAsStreamAsync()
-                                    .GetAwaiter()
-                                    .GetResult())
-                                using (var fileStream = new FileStream(
-                                    tempFile,
-                                    FileMode.Create,
-                                    FileAccess.Write,
-                                    FileShare.None))
-                                {
-                                    responseStream.CopyTo(fileStream);
-                                }
-
-                                //validate file size
-                                FileInfo fi = new FileInfo(tempFile);
-                                if (fi.Length != expectedSize.Value)
-                                {
-                                    File.Delete(tempFile);
-
-                                    rsp.Success = false;
-                                    rsp.Message = "File size mismatch";
-                                    rsp.HasUpdate = true;
-
-                                    return (false, rsp); //retry
-                                }
-
-                                //validate hash
-                                string actualHash = ComputeSha256(tempFile);
-                                if (!actualHash.Equals(expectedHash, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    File.Delete(tempFile);
-
-                                    rsp.Success = false;
-                                    rsp.Message = "File not valid, hash not match";
-                                    rsp.HasUpdate = true;
-
-                                    return (true, rsp); //no retry
-                                }
-
-                                //renaming file
-                                string finalFile = Path.Combine(
-                                    DirectoryConfig.DownloadDirectory,
-                                    fileName + ".downloaded"
-                                );
-
-                                if (File.Exists(finalFile))
-                                    File.Delete(finalFile);
-
-                                File.Move(tempFile, finalFile);
-
-                                rsp.Success = true;
-                                rsp.HasUpdate = true;
-                                rsp.Message = "File successfully downloaded";
-
-                                return (true, rsp);
+                                return (rspFile.success, rsp);
+                                
                             }
                         }
 
@@ -703,25 +632,25 @@ namespace FileDownloader
             catch (TaskCanceledException)
             {
                 rsp.Success = false;
-                rsp.Message = "Error : CheckClientUpdates => Timeout reached";
+                rsp.Message = "CheckClientUpdates: Error => Timeout reached";
                 return (false, rsp);
             }
             catch (HttpRequestException)
             {
                 rsp.Success = false;
-                rsp.Message = "Error : CheckClientUpdates => Network error";
+                rsp.Message = "CheckClientUpdates: Error => Network error";
                 return (false, rsp);
             }
             catch (IOException ex)
             {
                 rsp.Success = false;
-                rsp.Message = $"Error : CheckClientUpdates => {ex.Message}";
+                rsp.Message = $"CheckClientUpdates: Error => {ex.Message}";
                 return (true, rsp); //no retry
             }
             catch (Exception ex)
             {
                 rsp.Success = false;
-                rsp.Message = $"Error : CheckClientUpdates => {ex.Message}";
+                rsp.Message = $"CheckClientUpdates: Error => {ex.Message}";
                 return (true, rsp); //no retry
             }
         }
@@ -781,7 +710,7 @@ namespace FileDownloader
             return info.FileVersion ?? "0.0.0.0";
         }
 
-        private static string ComputeSha256(string filePath)
+        public static string ComputeSha256(string filePath)
         {
             using (var sha256 = SHA256.Create())
             using (var stream = File.OpenRead(filePath))
@@ -803,9 +732,13 @@ namespace FileDownloader
                 {
                     string result = System.Text.Encoding.UTF8.GetString(bytes);
                     // FlexibleMessageBox.Show(result);
+
+                    Util.WriteLog($"Connected to Remote : {address}");
                     return true;
                 }
 
+                Util.WriteLog($"Connection failed to Remote : {address}");
+                return false;
             }
             catch
             {
@@ -828,6 +761,13 @@ namespace FileDownloader
             {
                 req = new ReqHeaderAuth();
 
+                //req.branch = LandingPage.reqHeader.branch;
+                //req.outlet = LandingPage.reqHeader.outlet;
+                //req.terminal = LandingPage.reqHeader.terminal;
+                //req.ipAddress = LandingPage.reqConfig.ipAddress;
+
+                //req.mstid = DataNasabah.vMstid;
+
                 //generate random 6 digit w/ every 1 changed to 9
                 Random rnd = new Random();
                 int number = rnd.Next(100000, 1000000);
@@ -836,14 +776,14 @@ namespace FileDownloader
 
                 //generate 2 minute expiry time
                 long nowMillis = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                long expMillis = nowMillis + (2 * 60 * 1000);
+                long expMillis = nowMillis + (200 * 60 * 1000);
 
                 string expiryStr = expMillis.ToString();
 
                 string key = $"{result}" +
                     $"-{ClientConfig.Branch}" +
                     $"-{ClientConfig.Outlet}" +
-                    $"-{ClientConfig.Branch}" +
+                    $"-{ClientConfig.IpAddress}" +
                     $"-{expiryStr}" +
                     $"-{ClientConfig.Terminal}";
 
@@ -862,7 +802,7 @@ namespace FileDownloader
             }
             catch (Exception ex)
             {
-                Util.WriteLog("Error :" + ex.Message);
+                Util.WriteLog("GenReqGetToken: Error => " + ex.Message);
             }
             return strReq;
 
@@ -887,7 +827,7 @@ namespace FileDownloader
             }
             catch (Exception ex)
             {
-                Util.WriteLog("Error :" + ex.Message);
+                Util.WriteLog("GenReqCheckUpdate: Error => " + ex.Message);
             }
             return strReq;
 
@@ -924,12 +864,12 @@ namespace FileDownloader
         #endregion
 
         #region HIT TO ENDPOINT
-        private static bool PostGetEncKey()
+        private static bool GetEncKey()
         {
             try
             {
                 Util.WriteLog("Req Get Enc Key : " + Helper.MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathGetEncKey);
-                var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathGetEncKey, HttpMethod.Post);
+                var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathGetEncKey, HttpMethod.Get);
 
                 JavaScriptSerializer js = new JavaScriptSerializer();
                 js = new JavaScriptSerializer();
@@ -980,7 +920,7 @@ namespace FileDownloader
             }
             catch (Exception ex)
             {
-                Util.WriteLog("PostGetEncKey: Error => " + ex.Message);
+                Util.WriteLog("GetEncKey: Error => " + ex.Message);
                 return false;
             }
 
@@ -994,7 +934,7 @@ namespace FileDownloader
                 string strReq = GenReqGetToken();
 
                 Util.WriteLog($"Req Get Token : " + Helper.MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathAuth 
-                    + "==>\n" + strReq);
+                    + " =>\n" + strReq);
                 var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathAuth, HttpMethod.Post, strReq);
 
                 if (string.IsNullOrEmpty(_))
@@ -1022,12 +962,12 @@ namespace FileDownloader
             return true;
         }
 
-        public static bool PostGetExecDatetime()
+        public static bool GetExecDatetime()
         {
             try
             {
                Util.WriteLog("Req Get Exec Datetime : " + MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathGetExecTime);
-                var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathGetExecTime, HttpMethod.Post);
+                var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathGetExecTime, HttpMethod.Get);
 
                 JavaScriptSerializer js = new JavaScriptSerializer();
                 js = new JavaScriptSerializer();
@@ -1058,7 +998,7 @@ namespace FileDownloader
             }
             catch (Exception ex)
             {
-               Util.WriteLog("PostGetExecDatetime: Error => " + ex.Message);
+               Util.WriteLog("GetExecDatetime: Error => " + ex.Message);
                 return false;
             }
 
@@ -1075,7 +1015,7 @@ namespace FileDownloader
                 string strReq = GenReqCheckUpdate();
 
                 Util.WriteLog($"Req Check Update : " + Helper.MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathCheckVersion
-                    + "==>\n" + strReq);
+                    + " =>\n" + strReq);
 
                 //step 2.2: loop hit to endpoint while status equals false
                 do
@@ -1091,14 +1031,14 @@ namespace FileDownloader
                 }
                 while (!status);
 
-                return (rsp.Success, rsp);
+                return (status, rsp);
             }
             catch (Exception ex)
             {
                 Util.WriteLog("PostCheckUpdate: Error => " + ex.Message);
             }
 
-            return (true, rsp);
+            return (false, rsp);
         }
         
         public static bool PostUpdateStatus(int step)
@@ -1109,9 +1049,9 @@ namespace FileDownloader
                 string strReq = GenReqUpdateStatus(step);
 
                 Util.WriteLog($"Req Update Status : " + Helper.MaskedBaseUrl(ConnectionConfig.ConnectionUrl) + ConnectionConfig.PathUpdateStep
-                    + "==>\n" + strReq);
+                    + " =>\n" + strReq);
 
-                var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathAuth, HttpMethod.Post, strReq);
+                var _ = SendToMiddleWare(ConnectionConfig.ConnectionUrl + ConnectionConfig.PathUpdateStep, HttpMethod.Post, strReq);
 
                 if (string.IsNullOrEmpty(_))
                     return false;

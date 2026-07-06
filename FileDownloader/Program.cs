@@ -29,32 +29,45 @@ namespace FileDownloader
 
         private static void ExecProgram()
         {
+            #region header
+            Console.WriteLine($"\n#################################################################\n" +
+                $"                        DIGICSLITE UPDATER" +
+                $"\n#################################################################\n");
+            #endregion
+
+            Util.WriteLog($"\nProgram started, process will begin..");
+
             bool isOk = false;
             isOk = Helper.ReadConfig();
             bool isExecDateTimeExist = false;
-            isExecDateTimeExist = Helper.PostGetExecDatetime();
-            if (isOk && isExecDateTimeExist)
-            {
-                //StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
-                //    FtpConfig.RemoteDirectory, FtpConfig.DownloadDirectory, FtpConfig.TempDirectory, FtpConfig.TargetDirectory, FtpConfig.LogDirectory);
+            isExecDateTimeExist = Helper.GetExecDatetime();
+
+            if (isOk)
                 RunScheduler();
-            }
-            else if (isOk && !isExecDateTimeExist)
-            {
-                AppData.ExecTime = "16.00";
-                RunScheduler();
-            }
-            else
-            {
-                Util.WriteLog("Error reading config file");
-                Thread.Sleep(5000);
-            }
+
+            //if (isOk && isExecDateTimeExist)
+            //{
+            //    //StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
+            //    //    FtpConfig.RemoteDirectory, FtpConfig.DownloadDirectory, FtpConfig.TempDirectory, FtpConfig.TargetDirectory, FtpConfig.LogDirectory);
+            //    RunScheduler();
+            //}
+            //else if (isOk && !isExecDateTimeExist)
+            //{
+            //    AppData.ExecTime = "16.00";
+            //    RunScheduler();
+            //}
+            //else
+            //{
+            //    Util.WriteLog("Error reading config file");
+            //    Thread.Sleep(5000);
+            //}
         }
 
         private static void RunScheduler()
         {
-            bool onLoop = true;
-            while (onLoop)
+            bool onLoop = true; 
+            Util.WriteLog("Running scheduler...");
+            do
             {
                 DateTime currentTime = DateTime.Now;
                 string execTime = AppData.ExecTime;
@@ -65,18 +78,23 @@ namespace FileDownloader
                     //StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
                     //        FtpConfig.RemoteDirectory, FtpConfig.DownloadDirectory, FtpConfig.TempDirectory, FtpConfig.TargetDirectory, FtpConfig.LogDirectory);
 
-                    if (splitExecTime.Length > 1)
-                    {
-                        DateTime scheduledTime = new DateTime(currentTime.Year, currentTime.Month, currentTime.Day, int.Parse(splitExecTime[0]), int.Parse(splitExecTime[1]), 0);
+                    Util.WriteLog("StartProcess executed at: " + currentTime);
+                    StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
+                        DirectoryConfig.RemoteDirectory, DirectoryConfig.DownloadDirectory, DirectoryConfig.TempDirectory, DirectoryConfig.TargetDirectory, DirectoryConfig.LogDirectory,
+                        ConnectionConfig.ConnectionUrl);
 
-                        if (currentTime >= scheduledTime && currentTime < scheduledTime.AddMinutes(1))
-                        {
-                            Util.WriteLog("StartProcess executed at: " + currentTime);
-                            StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
-                                DirectoryConfig.RemoteDirectory, DirectoryConfig.DownloadDirectory, DirectoryConfig.TempDirectory, DirectoryConfig.TargetDirectory, DirectoryConfig.LogDirectory,
-                                ConnectionConfig.ConnectionUrl);
-                        }
-                    }
+                    //if (splitExecTime.Length > 1)
+                    //{
+                    //    DateTime scheduledTime = new DateTime(currentTime.Year, currentTime.Month, currentTime.Day, int.Parse(splitExecTime[0]), int.Parse(splitExecTime[1]), 0);
+
+                    //    if (currentTime >= scheduledTime && currentTime < scheduledTime.AddMinutes(1))
+                    //    {
+                    //        Util.WriteLog("StartProcess executed at: " + currentTime);
+                    //        StartProcess(FtpConfig.Protocol, FtpConfig.Username, FtpConfig.Password, FtpConfig.Host, FtpConfig.Fingerprint,
+                    //            DirectoryConfig.RemoteDirectory, DirectoryConfig.DownloadDirectory, DirectoryConfig.TempDirectory, DirectoryConfig.TargetDirectory, DirectoryConfig.LogDirectory,
+                    //            ConnectionConfig.ConnectionUrl);
+                    //    }
+                    //}
 
                     Thread.Sleep(10000);
                 }
@@ -84,7 +102,7 @@ namespace FileDownloader
                 {
                     onLoop = false;
                 }
-            }
+            } while (onLoop);
         }
 
         private static void StartProcess(string protocol, string username, string password, string host, string fingerprint,
@@ -103,28 +121,22 @@ namespace FileDownloader
 
             //encode special char for username & pass
             //username = Helper.EncodeSpecialChar(username);
-            //password = Helper.EncodeSpecialChar(password);
+            //password = Helper.EncodeSpecialChar(password);;
 
             if (tempDirExist && downloadDirExist && targetDirExist && logDirExist)
             {
-                if (ClientConfig.Mode.Equals("1"))
+                if (ClientConfig.Mode.Equals("1")) //remote
                 {
-                    bool isConnect = Helper.IsAddressAvailable(remoteAddress);
                     //step 1: checking connection to remote
                     Util.WriteLog($"Checking connection to remote : {Helper.MaskedBaseUrl(remoteAddress)}");
+                    bool isConnect = Helper.IsAddressAvailable(remoteAddress);
 
                     do
                     {
+                        Util.ClearTempFolder(tempDirectory);
+
                         //step 2: checking version
                         Util.WriteLog($"Checking version..");
-
-                        #region header
-                        Console.WriteLine($"\n#################################################################\n" +
-                            $"                        DIGICSLITE UPDATER" +
-                            $"\n#################################################################\n" +
-                            $"" +
-                            $"");
-                        #endregion
 
                         bool checkUpdate = false, isUpdateExist = false;
                         RspCheckUpdate rspCheckUpdate;
@@ -158,6 +170,7 @@ namespace FileDownloader
                                 //check for existing update
                                 if (existingFiles.Any())
                                 {
+                                    int backedUpFile = 0;
                                     foreach (string file in existingFiles)
                                     {
                                         string filename = Path.GetFileName(file);
@@ -166,8 +179,23 @@ namespace FileDownloader
                                         isBackupSuccess = Process.BackupMultipartFiles(filename, downloadDirectory);
                                         if (isBackupSuccess)
                                         {
+                                            ++backedUpFile;
+                                        }
+                                        else
+                                        {
+                                            Util.WriteLog("Backuping the last version package failed, process aborted..");
+                                        }
+                                    }
+
+                                    if (backedUpFile > 0)
+                                    {
+                                        if (backedUpFile == existingFiles.Count)
+                                        {
                                             //update status in db
                                             bool updateStatus = Helper.PostUpdateStatus(2); //start updating
+
+                                            //rename file to existing file
+                                            bool renameFile = Util.RenameFile(downloadDirectory);
 
                                             //extract files
                                             if (updateStatus)
@@ -186,7 +214,7 @@ namespace FileDownloader
                                         }
                                         else
                                         {
-                                            Util.WriteLog("Backuping the last version package failed, process aborted..");
+                                            Util.WriteLog("There are unsuccessful backup attempt");
                                         }
                                     }
                                 }
@@ -194,6 +222,9 @@ namespace FileDownloader
                                 {
                                     //update status in db
                                     bool updateStatus = Helper.PostUpdateStatus(2); //start updating
+
+                                    //rename file to existing file
+                                    bool renameFile = Util.RenameFile(downloadDirectory);
 
                                     //extract files
                                     if (updateStatus)
@@ -238,6 +269,13 @@ namespace FileDownloader
                                     AppData.SuccessProcess = true;
                                 }
                             }
+
+                            isRemoteCycleOk = true;
+                        }
+                        else
+                        {
+                            Util.WriteLog($"Check for update fail..\n");
+                            //isRemoteCycleOk = true;
                         }
 
                         Util.ClearTempFolder(tempDirectory);
@@ -285,14 +323,6 @@ namespace FileDownloader
                                     }
                                 }
                             }
-
-                            #region header
-                            Console.WriteLine($"\n#################################################################\n" +
-                                $"                        DIGICSLITE UPDATER" +
-                                $"\n#################################################################\n");
-                            #endregion
-
-                            Util.WriteLog($"Program started, process will begin..");
 
                             Util.ClearTempFolder(tempDirectory);
 
